@@ -18,6 +18,15 @@ pub struct GetBackup {
     transport: Option<Arc<dyn ShardTransport>>,
 }
 
+/// Result of a restore, including how degraded the blob was on read — so the
+/// caller can heal it proactively (reactive repair) before further loss pushes
+/// it below `k`.
+pub struct RestoreOutcome {
+    pub ciphertext: Vec<u8>,
+    pub shards_total: usize,
+    pub shards_missing: usize,
+}
+
 impl GetBackup {
     pub fn new(
         metadata: Arc<dyn MetadataStore>,
@@ -53,6 +62,17 @@ impl GetBackup {
         token: &CapabilityToken,
         blob_id: &BlobId,
     ) -> PortResult<Vec<u8>> {
+        Ok(self.restore(namespace, token, blob_id).await?.ciphertext)
+    }
+
+    /// Like [`Self::execute`], but also reports how many shards were missing on
+    /// read so the caller can trigger reactive repair when the blob is degraded.
+    pub async fn restore(
+        &self,
+        namespace: &NamespaceId,
+        token: &CapabilityToken,
+        blob_id: &BlobId,
+    ) -> PortResult<RestoreOutcome> {
         authorize(
             &self.verifier,
             &self.metadata,
@@ -86,19 +106,24 @@ impl GetBackup {
             }
         }
 
+        let total = manifest.shards.len();
         if !manifest.is_reconstructable(available) {
             return Err(PortError::Unavailable(format!(
-                "only {available} valid of {} shards (need k={})",
-                manifest.shards.len(),
+                "only {available} valid of {total} shards (need k={})",
                 manifest.erasure.k
             )));
         }
 
-        self.erasure.decode(
+        let ciphertext = self.erasure.decode(
             &collected,
             manifest.erasure,
             manifest.ciphertext_len as usize,
-        )
+        )?;
+        Ok(RestoreOutcome {
+            ciphertext,
+            shards_total: total,
+            shards_missing: total - available,
+        })
     }
 
     /// Load one shard, preferring peers, then the anchor. Returns the verified

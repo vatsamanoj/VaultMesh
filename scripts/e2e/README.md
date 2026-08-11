@@ -43,5 +43,8 @@ process — so back-to-back runs don't trip over orphaned servers.
 - `run.sh` — boot + tap-to-restore round-trip (`roundtrip.py`).
 - `durability.sh` — 2-node mesh durability drill (shard loss, self-heal,
   peer-assisted repair).
+- `reactive.sh` — reactive-repair drill: a plain read of a degraded blob heals
+  it on the anchor with no explicit `/maintenance/repair` call (repair
+  auto-runs before it hits the `k`-shard limit).
 - `lib.sh` — shared port-preflight helpers.
 - `roundtrip.py` — the Playwright round-trip test.

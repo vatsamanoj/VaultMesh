@@ -100,14 +100,34 @@ pub async fn get_backup(
     State(st): State<AppState>,
     Json(req): Json<GetRequest>,
 ) -> Result<Json<RestoredBlob>, ApiError> {
-    let ciphertext = st
+    let outcome = st
         .get
-        .execute(&req.namespace, &req.token, &req.blob_id)
+        .restore(&req.namespace, &req.token, &req.blob_id)
         .await
         .map_err(err)?;
+    // Reactive repair: if the read succeeded but the blob was degraded (some
+    // shards missing/corrupt), heal it now — in the background, off the read
+    // path — so active data never drifts toward the k-shard cliff between
+    // scheduled sweeps. Any shards rebuilt are folded into the sweep counter so
+    // the console indicator reflects reactive heals too.
+    if outcome.shards_missing > 0 {
+        let repair = st.repair.clone();
+        let sweep = st.sweep.clone();
+        let namespace = req.namespace.clone();
+        let blob_id = req.blob_id.clone();
+        tokio::spawn(async move {
+            if let Ok(report) = repair.execute(&namespace, &blob_id).await {
+                if report.repaired > 0 {
+                    if let Ok(mut s) = sweep.lock() {
+                        s.total_repaired += report.repaired as u64;
+                    }
+                }
+            }
+        });
+    }
     Ok(Json(RestoredBlob {
         blob_id: req.blob_id,
-        ciphertext_b64: STANDARD.encode(ciphertext),
+        ciphertext_b64: STANDARD.encode(outcome.ciphertext),
     }))
 }
 

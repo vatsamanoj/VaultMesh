@@ -83,3 +83,8 @@ without touching the use-cases.
 - **Reed-Solomon** erasure coding (P1) means any *K* of *N* shards reconstruct
   the blob. **Per-shard SHA-256** integrity catches tampering; a failed shard is
   repaired from the anchor.
+- **Repair is both scheduled and reactive.** A background sweep walks blobs on a
+  timer, and a restore that finds a blob degraded (still ≥ *K*, but missing or
+  corrupt shards) triggers a background heal off the read path — so frequently
+  read data is repaired the moment it's touched, before further loss can push it
+  below *K*.

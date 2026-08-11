@@ -99,7 +99,12 @@ is always the authoritative fallback — so peers going offline never blocks a
 restore. Configure peers with `VAULT_PEERS`.
 
 **P3** adds the **self-healing repair loop** (`RepairShards` — rebuild
-missing/corrupt shards from survivors), the **active perimeter**
+missing/corrupt shards from survivors). It runs two ways: a background sweep on
+a timer (`VAULT_REPAIR_SECS`), and **reactively** — any restore that finds a
+blob degraded (some shards missing/corrupt but still ≥ `k`) kicks off a
+background heal off the read path, so active data is repaired the moment it's
+touched and never drifts toward the `k`-shard cliff between sweeps. Also the
+**active perimeter**
 (`adapter-perimeter` — a tamper-evident intrusion ledger + an escalating
 allow→tarpit→block responder wired as coordinator middleware),
 **quotas/billing** (`UsageReport` + `/v1/usage/{app}`), a **self-signed CA**

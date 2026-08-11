@@ -8,7 +8,9 @@ use adapter_crypto::{AesGcmCryptographer, Ed25519Signer, RandomIdSource, SystemC
 use adapter_memstore::MemoryMetadataStore;
 use adapter_reed_solomon::ReedSolomonCoder;
 use tempfile::TempDir;
-use vault_app::{CreateNamespace, IssueCapability, PutBackup, RegisterApp, RepairShards};
+use vault_app::{
+    CreateNamespace, GetBackup, IssueCapability, PutBackup, RegisterApp, RepairShards,
+};
 use vault_domain::{AppId, BlobId, ErasureParams, NamespaceId, Operation, Quota, RetentionPolicy};
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
@@ -21,6 +23,7 @@ struct Ctx {
     ids: Arc<dyn IdSource>,
     clock: Arc<dyn Clock>,
     put: PutBackup,
+    get: GetBackup,
     repair: RepairShards,
     root: PathBuf,
     _tmp: TempDir,
@@ -47,6 +50,14 @@ fn ctx() -> Ctx {
         ids.clone(),
         clock.clone(),
     );
+    let get = GetBackup::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+        verifier.clone(),
+        clock.clone(),
+    );
     let repair = RepairShards::new(
         metadata.clone(),
         anchor.clone(),
@@ -61,6 +72,7 @@ fn ctx() -> Ctx {
         ids,
         clock,
         put,
+        get,
         repair,
         root,
         _tmp: tmp,
@@ -133,6 +145,37 @@ async fn repairs_missing_and_corrupt_shards() {
     for i in [1u16, 3] {
         assert!(c.shard(&ns, &blob, i).exists());
     }
+}
+
+#[tokio::test]
+async fn degraded_read_reports_missing_and_stays_byte_identical() {
+    let c = ctx();
+    let (app, ns) = c.onboard().await;
+    let payload = b"reactive repair heals on read before hitting the limit";
+    let key = c.crypto.derive_key(b"s", ns.as_str().as_bytes());
+    let blob = c.store(&app, &ns, payload).await;
+
+    // Two shards go bad — within the parity budget, so the read still succeeds.
+    std::fs::remove_file(c.shard(&ns, &blob, 1)).unwrap();
+    std::fs::write(c.shard(&ns, &blob, 3), b"corrupt").unwrap();
+
+    let tok = IssueCapability::new(
+        c.metadata.clone(),
+        c.signer.clone(),
+        c.ids.clone(),
+        c.clock.clone(),
+    )
+    .execute(&app, &ns, Operation::Get, 300)
+    .await
+    .unwrap();
+
+    // restore() reports the degradation the reactive-repair path keys off of...
+    let outcome = c.get.restore(&ns, &tok, &blob).await.unwrap();
+    assert_eq!(outcome.shards_missing, 2);
+    assert_eq!(outcome.shards_total, 6);
+    // ...and the restored ciphertext still decrypts byte-identically.
+    let plain = c.crypto.decrypt(&key, &outcome.ciphertext).unwrap();
+    assert_eq!(plain, payload);
 }
 
 #[tokio::test]

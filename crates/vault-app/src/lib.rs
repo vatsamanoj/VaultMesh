@@ -19,7 +19,7 @@ mod usage_report;
 
 pub use create_namespace::CreateNamespace;
 pub use delete_backup::DeleteBackup;
-pub use get_backup::GetBackup;
+pub use get_backup::{GetBackup, RestoreOutcome};
 pub use issue_capability::{IssueCapability, MAX_TOKEN_TTL_SECS};
 pub use list_backups::ListBackups;
 pub use prune_versions::{PruneReport, PruneVersions};
