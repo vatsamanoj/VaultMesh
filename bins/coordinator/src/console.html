@@ -83,6 +83,10 @@
   @media (prefers-color-scheme:dark){.shardtag{background:rgba(255,255,255,.08)}}
   .toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--panel);padding:10px 20px;border-radius:22px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:.25s;z-index:70}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .menu{position:fixed;top:56px;left:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:6px;z-index:65;display:none;min-width:220px}
+  .menu.show{display:block}
+  .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--ink);font:inherit;font-size:14px;padding:10px 12px;border-radius:7px;cursor:pointer}
+  .menu button:hover{background:var(--side-hover)}
   .stamp{font-size:11px;color:var(--muted);float:right;margin:4px 0 -2px 8px;display:flex;align-items:center;gap:3px}
   .tick{color:var(--tick);font-size:14px;font-weight:700}
   .tick.pending{color:var(--muted)}
@@ -131,6 +135,10 @@
 <body>
 <div class="banner" id="banner">Offline demo — not connected to a live coordinator.</div>
 <div class="toast" id="toast"></div>
+<div class="menu" id="setMenu">
+  <button id="mnSecurity">🛡 Perimeter / Security</button>
+  <button id="mnNode">🔗 node-agent URL…</button>
+</div>
 <div class="app" id="app">
   <!-- sidebar -->
   <div class="sidebar">
@@ -446,9 +454,12 @@ function showEnrollCard(res){
 }
 
 /* ---------- settings ---------- */
-$('#setBtn').onclick=()=>{
+$('#setBtn').onclick=e=>{e.stopPropagation();$('#setMenu').classList.toggle('show');};
+document.addEventListener('click',e=>{if(!e.target.closest('#setMenu')&&e.target!==$('#setBtn'))$('#setMenu').classList.remove('show');});
+$('#mnSecurity').onclick=()=>{$('#setMenu').classList.remove('show');window.open('/security','_blank');};
+$('#mnNode').onclick=()=>{$('#setMenu').classList.remove('show');
   const cur=nodeUrl();const v=prompt('node-agent data-plane URL (where files are uploaded/restored):',cur);
-  if(v!==null){localStorage.setItem('vm.nodeUrl',v.trim());alert('Saved. node-agent = '+nodeUrl());}
+  if(v!==null){localStorage.setItem('vm.nodeUrl',v.trim());toast('Saved · node-agent = '+nodeUrl());}
 };
 async function repairVault(ns){
   toast('🩺 Repairing '+(MODEL[ns]?.label||short(ns))+'…');
