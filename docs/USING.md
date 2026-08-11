@@ -30,6 +30,9 @@ file-backup client (`scripts/vaultfile.py`).
 
 ## How your app connects
 
+> For a step-by-step Contract → upload → download walkthrough with copy-paste
+> `curl` for every endpoint, see [`docs/CONTRACT-LIFECYCLE.md`](CONTRACT-LIFECYCLE.md).
+
 Two planes, two endpoints:
 
 1. **Control plane → coordinator (`:8787`)**, done once / occasionally:
