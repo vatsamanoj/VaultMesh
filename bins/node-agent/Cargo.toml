@@ -17,6 +17,7 @@ vault-ports = { workspace = true }
 vault-app = { workspace = true }
 vault-proto = { workspace = true }
 adapter-blob-fs = { workspace = true }
+adapter-rustfs = { workspace = true }
 adapter-reed-solomon = { workspace = true }
 adapter-peer-http = { workspace = true }
 adapter-quic = { workspace = true }

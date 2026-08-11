@@ -1,0 +1,16 @@
+[package]
+name = "adapter-rustfs"
+description = "VaultMesh RustFS anchor — the authoritative BlobAnchor over an S3-compatible object store."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+object_store = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }

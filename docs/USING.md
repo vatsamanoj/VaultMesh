@@ -97,17 +97,41 @@ VAULT_PEERS=OTHER_NODE_IP:8791  node-agent
 Open **8787** (coordinator) to the node-agents, and the **QUIC port** between
 peers. The app always talks to its **local** node-agent on `127.0.0.1:8790`.
 
-## Current limitations (this reference build)
+## Storage: RustFS (S3) or local filesystem
 
-- The anchor is a **local filesystem** stand-in, not the production RustFS
-  object store — swap `adapter-blob-fs` for `adapter-rustfs` behind the same
-  `BlobAnchor` port for true off-site storage.
+The anchor is selectable via `VAULT_ANCHOR`:
+
+- **`fs`** (default) — a local directory (`VAULT_ANCHOR_ROOT`). Fine for a single
+  machine or a quick start.
+- **`rustfs`** (or `s3`) — the authoritative **RustFS** object store over its
+  S3-compatible API. This is true off-site storage; because RustFS speaks S3,
+  the same config also works against MinIO or AWS S3.
+
+```sh
+VAULT_ANCHOR=rustfs \
+VAULT_S3_ENDPOINT=http://rustfs-host:9000 \
+VAULT_S3_BUCKET=vaultmesh \
+VAULT_S3_REGION=us-east-1 \
+VAULT_S3_ACCESS_KEY=... \
+VAULT_S3_SECRET_KEY=... \
+VAULT_S3_ALLOW_HTTP=true   # set false / omit when the endpoint is HTTPS
+  node-agent
+```
+
+Create the bucket once, then start the node-agent — each shard lands as an object
+at `s3://<bucket>/<namespace>/<blob>/<index>.shard`. Verified end-to-end: a real
+file backed up via `vaultfile.py` stored its six shards in the bucket (no
+plaintext in any of them) and restored byte-identical.
+
+## Remaining hardening (this reference build)
+
 - The self-signed CA exists, but the HTTP ingress does **not yet require mTLS
   client certs** — so L1 (client-cert) isn't enforced on the wire in this build.
   L2 (capability tokens), L3 (namespace ACL), and L4 (client-side encryption)
   are enforced.
+- Node-agents talk to RustFS directly; hardening to coordinator-issued,
+  path-scoped **presigned URLs** (so the anchor is never reachable by clients) is
+  a later step behind the same `BlobAnchor` port.
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
 
-These are the documented next steps to go from reference implementation to a
-hardened deployment; the architecture (ports/adapters) is built so each is a
-drop-in swap.
+The ports/adapters architecture is built so each of these is a drop-in swap.

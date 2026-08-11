@@ -7,6 +7,7 @@ members = [
     "crates/vault-proto",
     "crates/adapter-crypto",
     "crates/adapter-blob-fs",
+    "crates/adapter-rustfs",
     "crates/adapter-memstore",
     "crates/adapter-erasure",
     "crates/adapter-reed-solomon",
@@ -47,6 +48,8 @@ tower = "0.5"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+object_store = { version = "0.11", features = ["aws"] }
+futures = "0.3"
 
 # crypto adapters
 aes-gcm = "0.10"
@@ -69,6 +72,7 @@ vault-app = { path = "crates/vault-app" }
 vault-proto = { path = "crates/vault-proto" }
 adapter-crypto = { path = "crates/adapter-crypto" }
 adapter-blob-fs = { path = "crates/adapter-blob-fs" }
+adapter-rustfs = { path = "crates/adapter-rustfs" }
 adapter-memstore = { path = "crates/adapter-memstore" }
 adapter-erasure = { path = "crates/adapter-erasure" }
 adapter-reed-solomon = { path = "crates/adapter-reed-solomon" }

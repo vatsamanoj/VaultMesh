@@ -43,7 +43,7 @@ swappable **adapters**. Every file targets **≤500 lines**, enforced in CI.
 
 | Port | Purpose | P0 adapter | Later adapter |
 |------|---------|-----------|---------------|
-| `BlobAnchor` | Authoritative full-set object store | `adapter-blob-fs` | `adapter-rustfs` |
+| `BlobAnchor` | Authoritative full-set object store | `adapter-rustfs` (S3) · `adapter-blob-fs` (dev) | — |
 | `MetadataStore` | Registry, namespaces, manifests | `adapter-memstore` | `adapter-postgres` |
 | `Cryptographer` | AES-256-GCM + HKDF (client side) | `adapter-crypto` | HSM-backed |
 | `ErasureCoder` | Shard / reconstruct | `adapter-reed-solomon` (P1, any k-of-n) · `adapter-erasure` (passthrough) | — |

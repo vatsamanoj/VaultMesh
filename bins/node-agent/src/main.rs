@@ -5,7 +5,9 @@
 //! Env:
 //! - `VAULT_NODE_ADDR`        bind address (default `127.0.0.1:8790`)
 //! - `VAULT_COORDINATOR_URL`  control plane (default `http://127.0.0.1:8787`)
-//! - `VAULT_ANCHOR_ROOT`      local shard directory (default `./.vaultmesh/anchor`)
+//! - `VAULT_ANCHOR`           `fs` (default) or `rustfs`/`s3` for the object store.
+//! - `VAULT_ANCHOR_ROOT`      local shard directory (fs anchor; default `./.vaultmesh/anchor`).
+//! - `VAULT_S3_*`             ENDPOINT/BUCKET/REGION/ACCESS_KEY/SECRET_KEY/ALLOW_HTTP for RustFS.
 //! - `VAULT_PEERS`            comma-separated peer addresses for the mesh. HTTP
 //!   base URLs (`http://host:8790`) by default, or `host:port` when QUIC.
 //! - `VAULT_TRANSPORT`        `http` (default, P2) or `quic` (P4 direct P2P).
@@ -22,6 +24,7 @@ use adapter_crypto::{AesGcmCryptographer, Ed25519Verifier, RandomIdSource, Syste
 use adapter_peer_http::PeerHttpTransport;
 use adapter_quic::{QuicShardServer, QuicShardTransport};
 use adapter_reed_solomon::ReedSolomonCoder;
+use adapter_rustfs::{RustFsBlobAnchor, RustFsConfig};
 use axum::routing::{get, post, put};
 use axum::Router;
 use remote_meta::RemoteMetadataStore;
@@ -98,6 +101,37 @@ fn spawn_repair_sweep(
     });
 }
 
+/// Select the anchor from `VAULT_ANCHOR`:
+/// - `rustfs` / `s3` → the authoritative RustFS (S3-compatible) object store,
+///   configured from `VAULT_S3_*` env;
+/// - anything else (default) → the local filesystem stand-in.
+fn build_anchor(anchor_root: &str) -> Result<Arc<dyn BlobAnchor>, Box<dyn std::error::Error>> {
+    fn require(name: &str) -> Result<String, Box<dyn std::error::Error>> {
+        std::env::var(name)
+            .map_err(|_| format!("{name} is required for VAULT_ANCHOR=rustfs").into())
+    }
+    match std::env::var("VAULT_ANCHOR").ok().as_deref() {
+        Some("rustfs") | Some("s3") => {
+            let cfg = RustFsConfig {
+                endpoint: require("VAULT_S3_ENDPOINT")?,
+                bucket: require("VAULT_S3_BUCKET")?,
+                region: std::env::var("VAULT_S3_REGION").unwrap_or_else(|_| "us-east-1".into()),
+                access_key: require("VAULT_S3_ACCESS_KEY")?,
+                secret_key: require("VAULT_S3_SECRET_KEY")?,
+                allow_http: std::env::var("VAULT_S3_ALLOW_HTTP")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(true),
+            };
+            tracing::info!(bucket = %cfg.bucket, endpoint = %cfg.endpoint, "anchor: RustFS (S3-compatible)");
+            Ok(Arc::new(RustFsBlobAnchor::new(cfg)?))
+        }
+        _ => {
+            tracing::info!(root = %anchor_root, "anchor: filesystem (dev stand-in)");
+            Ok(Arc::new(FsBlobAnchor::new(anchor_root)))
+        }
+    }
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(routes::health))
@@ -139,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Adapters behind their ports.
     let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(coordinator.clone()));
-    let anchor: Arc<dyn BlobAnchor> = Arc::new(FsBlobAnchor::new(anchor_root));
+    let anchor: Arc<dyn BlobAnchor> = build_anchor(&anchor_root)?;
     let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
     let verifier: Arc<dyn AuthVerifier> = Arc::new(fetch_verifier(&coordinator).await?);

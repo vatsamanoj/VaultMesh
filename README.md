@@ -60,7 +60,8 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `vault-app` | Use-cases orchestrating ports: `RegisterApp`, `IssueCapability`, `PutBackup`, `GetBackup`, `ListBackups`. Depends on traits only. |
 | `vault-proto` | Versioned wire contract types (serde). The only shared surface. |
 | `adapter-crypto` | `Cryptographer` — AES-256-GCM + HKDF. |
-| `adapter-blob-fs` | `BlobAnchor` — filesystem anchor (dev stand-in for RustFS). |
+| `adapter-blob-fs` | `BlobAnchor` — filesystem anchor (dev stand-in). |
+| `adapter-rustfs` | `BlobAnchor` — RustFS / S3-compatible object store (production). |
 | `adapter-memstore` | `MetadataStore` — in-memory (P0/dev). |
 | `adapter-erasure` | `ErasureCoder` — P0 passthrough (`k = 1`). |
 | `adapter-reed-solomon` | `ErasureCoder` — P1 Reed-Solomon, any `k` of `n`. |
