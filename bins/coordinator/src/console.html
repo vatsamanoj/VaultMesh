@@ -81,6 +81,8 @@
   .fsub{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .shardtag{background:rgba(0,0,0,.06);border-radius:4px;padding:0 5px;font-family:var(--mono);font-size:11px}
   @media (prefers-color-scheme:dark){.shardtag{background:rgba(255,255,255,.08)}}
+  .toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--panel);padding:10px 20px;border-radius:22px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:.25s;z-index:70}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .stamp{font-size:11px;color:var(--muted);float:right;margin:4px 0 -2px 8px;display:flex;align-items:center;gap:3px}
   .tick{color:var(--tick);font-size:14px;font-weight:700}
   .tick.pending{color:var(--muted)}
@@ -128,6 +130,7 @@
 </head>
 <body>
 <div class="banner" id="banner">Offline demo — not connected to a live coordinator.</div>
+<div class="toast" id="toast"></div>
 <div class="app" id="app">
   <!-- sidebar -->
   <div class="sidebar">
@@ -383,15 +386,21 @@ $('#sendBtn').onclick=async()=>{
     el.querySelector('.tick').textContent='⚠';alert('Upload failed: '+e.message+'\nIs the node-agent reachable at '+nodeUrl()+' ?');}
 };
 
+let toastT;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2800);}
+
 async function restore(ns,f){
   const key=ensureKey(ns);if(!key)return;
+  toast('↓ Restoring '+f.name+'…');
   try{
     const token=await mintToken(ns,'Get');
     const r=await api(nodeUrl()+'/v1/backups/get',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({namespace:ns,token,blob_id:f.blob})});
     const plain=await decryptBytes(key,b64dec(r.ciphertext_b64));
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([plain]));a.download=f.name;a.click();
-  }catch(e){alert('Restore failed: '+e.message);}
+    toast('✓ Restored & decrypted '+f.name);
+  }catch(e){toast('⚠ Restore failed: '+e.message);}
 }
 
 /* ---------- enroll (new chat) ---------- */
