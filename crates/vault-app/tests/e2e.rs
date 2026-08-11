@@ -14,8 +14,8 @@ use vault_app::{
     CreateNamespace, DeleteBackup, GetBackup, IssueCapability, ListBackups, PutBackup, RegisterApp,
 };
 use vault_domain::{
-    AppId, CapabilityClaims, ErasureParams, NamespaceId, Nonce, Operation, Quota, RetentionPolicy,
-    Timestamp,
+    AppId, CapabilityClaims, DomainError, ErasureParams, NamespaceId, Nonce, Operation, Quota,
+    RetentionPolicy, Timestamp,
 };
 use vault_ports::{
     AuthVerifier, BlobAnchor, CapabilitySigner, Clock, Cryptographer, ErasureCoder, IdSource,
@@ -91,10 +91,15 @@ fn ctx() -> Ctx {
 
 impl Ctx {
     async fn onboard(&self) -> (AppId, NamespaceId) {
+        // Default harness: no retention hold, so CRUD tests can delete freely.
+        self.onboard_with(3, 0).await
+    }
+
+    async fn onboard_with(&self, keep_versions: u32, min_days: u32) -> (AppId, NamespaceId) {
         let contract = RegisterApp::new(self.metadata.clone(), self.ids.clone())
             .execute(
                 Quota::new(1 << 30, 1000),
-                RetentionPolicy::new(3, 30),
+                RetentionPolicy::new(keep_versions, min_days),
                 ErasureParams::recommended(), // Reed-Solomon 4-of-6
             )
             .await
@@ -167,6 +172,47 @@ async fn backup_restore_is_byte_identical() {
     c.delete.execute(&ns, &del_tok, &blob).await.unwrap();
     let list_tok2 = c.token(&app, &ns, Operation::List).await;
     assert!(c.list.execute(&ns, &list_tok2).await.unwrap().is_empty());
+}
+
+/// A `min_days` retention hold blocks deletion until it elapses. The check is
+/// server-side from the manifest's `created_at`, so it needs no plaintext.
+#[tokio::test]
+async fn delete_blocked_by_min_days_retention_hold() {
+    let c = ctx();
+    let (app, ns) = c.onboard_with(3, 7).await; // 7-day hold
+    let payload = b"held for compliance".to_vec();
+    let ct = c.seal(&ns, &payload);
+
+    let put_tok = c.token(&app, &ns, Operation::Put).await;
+    let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
+
+    // Immediate delete is refused by the retention hold.
+    let del_tok = c.token(&app, &ns, Operation::Delete).await;
+    let err = c.delete.execute(&ns, &del_tok, &blob).await.unwrap_err();
+    assert!(
+        matches!(
+            err,
+            PortError::Domain(DomainError::RetentionHold { min_days: 7 })
+        ),
+        "expected a 7-day retention hold, got {err:?}"
+    );
+
+    // Nothing was deleted — the blob is still listed.
+    let list_tok = c.token(&app, &ns, Operation::List).await;
+    assert_eq!(c.list.execute(&ns, &list_tok).await.unwrap(), vec![blob]);
+}
+
+/// With no hold (`min_days = 0`), deletion is allowed immediately.
+#[tokio::test]
+async fn delete_allowed_when_no_retention_hold() {
+    let c = ctx();
+    let (app, ns) = c.onboard_with(3, 0).await;
+    let ct = c.seal(&ns, b"no hold");
+    let put_tok = c.token(&app, &ns, Operation::Put).await;
+    let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
+
+    let del_tok = c.token(&app, &ns, Operation::Delete).await;
+    c.delete.execute(&ns, &del_tok, &blob).await.unwrap();
 }
 
 #[tokio::test]

@@ -30,6 +30,7 @@ fn domain_status(d: &DomainError) -> (StatusCode, &'static str) {
             (StatusCode::FORBIDDEN, "operation_not_permitted")
         }
         DomainError::QuotaExceeded => (StatusCode::TOO_MANY_REQUESTS, "quota_exceeded"),
+        DomainError::RetentionHold { .. } => (StatusCode::FORBIDDEN, "retention_hold"),
         DomainError::InvalidErasureParams { .. } => (StatusCode::BAD_REQUEST, "invalid_erasure"),
         DomainError::InvalidContract(_) => (StatusCode::BAD_REQUEST, "invalid_contract"),
     }

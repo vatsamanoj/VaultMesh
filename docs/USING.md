@@ -446,8 +446,23 @@ own fleet, heavier onboarding for arbitrary public customers.
 and `enroll-user.sh <name> <overlay-ip>` (signs a host cert and builds a
 ready-to-hand-off bundle). See `scripts/nebula-overlay/README.md`.
 
+## Retention
+
+Each app's Contract carries a `RetentionPolicy { keep_versions, min_days }`.
+
+- **`min_days` — enforced.** A blob cannot be deleted until `min_days` have
+  elapsed since its manifest `created_at` (a compliance/WORM-style hold). The
+  check is server-side from the manifest timestamp, so it needs no plaintext and
+  stays zero-knowledge. An early delete is refused with `403 retention_hold`;
+  `min_days = 0` disables the hold. Verified: a delete under a 7-day hold is
+  refused and the blob remains listed; with no hold, delete succeeds.
+- **`keep_versions` — not yet enforced.** Version pruning needs a client-supplied
+  opaque object id to group versions without the server learning filenames (see
+  "Shared filename index"); it's declared on the Contract but not swept yet.
+
 ## Remaining hardening (this reference build)
 
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
+- `keep_versions` retention (version pruning) is declarative, not yet enforced.
 
 The ports/adapters architecture is built so each of these is a drop-in swap.

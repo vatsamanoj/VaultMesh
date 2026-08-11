@@ -27,6 +27,9 @@ pub enum DomainError {
     #[error("namespace quota exceeded")]
     QuotaExceeded,
 
+    #[error("retention hold: blob must be kept at least {min_days} day(s) before deletion")]
+    RetentionHold { min_days: u32 },
+
     #[error("invalid contract: {0}")]
     InvalidContract(String),
 }

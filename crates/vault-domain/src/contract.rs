@@ -109,6 +109,17 @@ impl RetentionPolicy {
             min_days,
         }
     }
+
+    /// Whether a blob created at `created_at` may be deleted as of `now` — i.e.
+    /// its `min_days` retention hold has elapsed. `min_days == 0` means no hold.
+    /// Clock skew (now < created_at) is treated conservatively as "not elapsed".
+    pub fn hold_elapsed(&self, created_at: crate::Timestamp, now: crate::Timestamp) -> bool {
+        if self.min_days == 0 {
+            return true;
+        }
+        let elapsed_ms = now.0.saturating_sub(created_at.0);
+        elapsed_ms >= self.min_days as u64 * 86_400_000
+    }
 }
 
 /// VaultMesh only ever supports client-side encryption — it never holds keys.
@@ -173,5 +184,19 @@ mod tests {
         assert!(q.admits(900, 5, 100));
         assert!(!q.admits(950, 5, 100));
         assert!(!q.admits(0, 10, 1));
+    }
+
+    #[test]
+    fn retention_hold_elapses_at_min_days() {
+        const DAY: u64 = 86_400_000;
+        let p = RetentionPolicy::new(3, 30);
+        let created = crate::Timestamp(1_000_000);
+        // Before 30 days: held. At/after 30 days: releasable.
+        assert!(!p.hold_elapsed(created, crate::Timestamp(created.0 + 29 * DAY)));
+        assert!(p.hold_elapsed(created, crate::Timestamp(created.0 + 30 * DAY)));
+        // No hold configured -> always releasable.
+        assert!(RetentionPolicy::new(3, 0).hold_elapsed(created, created));
+        // Clock skew (now < created) is treated as not elapsed.
+        assert!(!p.hold_elapsed(crate::Timestamp(2_000_000), crate::Timestamp(1_000_000)));
     }
 }
