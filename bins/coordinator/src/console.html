@@ -2,243 +2,392 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>VaultMesh Operator Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>VaultMesh Chat</title>
 <style>
   :root{
-    --bg:#f6f7f9; --panel:#ffffff; --ink:#12161c; --muted:#5b6675;
-    --line:#e4e8ee; --brand:#2b6ef2; --brand-ink:#ffffff;
-    --ok:#1a7f52; --warn:#b4531a; --bad:#b3261e; --chip:#eef2f8;
+    --wa-green:#008069; --wa-green-d:#017561; --tick:#53bdeb;
+    --side:#ffffff; --side-hover:#f5f6f6; --side-active:#f0f2f5;
+    --panel:#ffffff; --chatbg:#efeae2; --out:#d9fdd3; --in:#ffffff;
+    --ink:#111b21; --muted:#667781; --line:#e9edef; --search:#f0f2f5;
+    --sys:#ffffff; --shadow:0 1px 1px rgba(11,20,26,.13);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   }
   @media (prefers-color-scheme:dark){:root{
-    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9aa7b4;
-    --line:#273040; --brand:#4d8bff; --chip:#1c2330;
+    --wa-green:#00a884; --side:#111b21; --side-hover:#202c33; --side-active:#2a3942;
+    --panel:#111b21; --chatbg:#0b141a; --out:#005c4b; --in:#202c33;
+    --ink:#e9edef; --muted:#8696a0; --line:#222d34; --search:#202c33; --sys:#182229;
+    --shadow:0 1px 1px rgba(0,0,0,.3);
   }}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.45}
-  header{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
-  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),#8a4dff);flex:0 0 auto}
-  h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
-  .pills{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
-  .pill{font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--muted)}
-  .pill b{color:var(--ink);font-weight:600}
-  .banner{display:none;margin:0;padding:9px 22px;font-size:13px;background:#fff6e6;color:#8a5b12;border-bottom:1px solid var(--line)}
-  @media (prefers-color-scheme:dark){.banner{background:#2a2113;color:#e7c37a}}
-  main{max-width:1040px;margin:0 auto;padding:22px}
-  nav{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
-  nav button{font:inherit;font-size:14px;padding:8px 15px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer}
-  nav button.active{background:var(--brand);color:var(--brand-ink);border-color:var(--brand);font-weight:600}
-  section{display:none} section.active{display:block}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
-  .card h2{margin:0 0 4px;font-size:15px}
-  .card p.sub{margin:0 0 16px;color:var(--muted);font-size:13px}
-  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
-  input[type=text]{width:100%;max-width:340px;font:inherit;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
-  .btn{font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border-radius:9px;border:0;background:var(--brand);color:var(--brand-ink);cursor:pointer;margin-top:12px}
-  .btn.ghost{background:var(--chip);color:var(--ink);border:1px solid var(--line);margin:0}
-  .btn:disabled{opacity:.5;cursor:progress}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
-  td.mono,code{font-family:var(--mono);font-size:12.5px}
-  .empty{color:var(--muted);font-size:13px;padding:14px 2px}
-  .result{border:1px solid var(--ok);border-radius:12px;padding:16px;margin-top:16px;display:none}
-  .result.show{display:block}
-  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;font-size:13px;margin-bottom:14px}
-  .kv div:nth-child(odd){color:var(--muted)}
-  .files a{margin-right:10px}
-  .dl{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-  pre{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:12px;overflow:auto;font-family:var(--mono);font-size:12px;margin:0}
-  select{font:inherit;padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px}
-  .tag{font-family:var(--mono);font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:#d1d7db;overflow:hidden}
+  @media (prefers-color-scheme:dark){body{background:#0a0f13}}
+  .app{display:flex;height:100vh;max-width:1600px;margin:0 auto;background:var(--panel)}
+
+  /* ---------------- sidebar ---------------- */
+  .sidebar{width:390px;min-width:300px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--side)}
+  .side-head{height:59px;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--side-active)}
+  .side-head .title{font-weight:600;font-size:16px;flex:1}
+  .side-head .logo{width:34px;height:34px;border-radius:50%;background:var(--wa-green);display:grid;place-items:center;color:#fff;font-weight:700}
+  .icons{display:flex;gap:4px}
+  .iconbtn{width:40px;height:40px;border:0;background:transparent;color:var(--muted);border-radius:50%;cursor:pointer;font-size:19px;display:grid;place-items:center}
+  .iconbtn:hover{background:rgba(0,0,0,.06)}
+  @media (prefers-color-scheme:dark){.iconbtn:hover{background:rgba(255,255,255,.06)}}
+  .searchwrap{padding:8px 12px;background:var(--side)}
+  .searchwrap input{width:100%;border:0;background:var(--search);border-radius:8px;padding:9px 14px 9px 40px;font:inherit;color:var(--ink);
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='%238696a0' viewBox='0 0 24 24'><path d='M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z'/></svg>");
+    background-repeat:no-repeat;background-position:12px center}
+  .chatlist{flex:1;overflow-y:auto}
+  .chat-item{display:flex;align-items:center;gap:13px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .chat-item:hover{background:var(--side-hover)}
+  .chat-item.active{background:var(--side-active)}
+  .avatar{width:49px;height:49px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;color:#fff;font-weight:600;font-size:18px}
+  .ci-main{flex:1;min-width:0}
+  .ci-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .ci-name{font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ci-time{font-size:12px;color:var(--muted);flex:0 0 auto}
+  .ci-sub{font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;display:flex;align-items:center;gap:6px}
+  .badge{background:var(--wa-green);color:#fff;border-radius:999px;font-size:11px;min-width:19px;height:19px;padding:0 6px;display:grid;place-items:center;font-weight:600}
+  .lock{font-size:11px}
+  .viewonly{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+
+  /* ---------------- chat pane ---------------- */
+  .chat{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--chatbg);position:relative}
+  .chat::before{content:"";position:absolute;inset:0;opacity:.4;pointer-events:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><g fill='none' stroke='%23c3bfb6' stroke-width='1' opacity='.35'><circle cx='15' cy='15' r='3'/><circle cx='45' cy='45' r='3'/><path d='M40 12h8M44 8v8'/></g></svg>")}
+  @media (prefers-color-scheme:dark){.chat::before{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><g fill='none' stroke='%23223' stroke-width='1'><circle cx='15' cy='15' r='3'/><circle cx='45' cy='45' r='3'/><path d='M40 12h8M44 8v8'/></g></svg>");opacity:.5}}
+  .chat-head{height:59px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--side-active);z-index:2}
+  .back{display:none;border:0;background:transparent;color:var(--muted);font-size:22px;cursor:pointer;padding:4px}
+  .ch-name{flex:1;min-width:0}
+  .ch-name .n{font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ch-name .s{font-size:12.5px;color:var(--muted)}
+  .messages{flex:1;overflow-y:auto;padding:14px 6%;z-index:1;display:flex;flex-direction:column;gap:5px}
+  .daysep{align-self:center;background:var(--sys);color:var(--muted);font-size:12.5px;padding:5px 12px;border-radius:8px;box-shadow:var(--shadow);margin:8px 0;text-transform:uppercase}
+  .sysmsg{align-self:center;max-width:520px;background:var(--sys);border-radius:8px;box-shadow:var(--shadow);padding:12px 14px;font-size:13px;color:var(--ink);margin:6px 0}
+  .sysmsg .kv{display:grid;grid-template-columns:84px 1fr;gap:3px 10px;font-size:12.5px;margin:6px 0}
+  .sysmsg .kv b{color:var(--muted);font-weight:500}
+  .sysmsg .mono{font-family:var(--mono);font-size:12px;word-break:break-all}
+  .dlrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .msg{max-width:min(75%,460px);border-radius:8px;padding:6px 8px 8px;box-shadow:var(--shadow);position:relative}
+  .msg.out{align-self:flex-end;background:var(--out);border-top-right-radius:2px}
+  .msg.in{align-self:flex-start;background:var(--in);border-top-left-radius:2px}
+  .filecard{display:flex;align-items:center;gap:12px;cursor:pointer;padding:6px 4px 4px}
+  .fico{width:40px;height:44px;flex:0 0 auto;border-radius:6px;background:rgba(0,0,0,.06);display:grid;place-items:center;color:var(--wa-green);font-weight:700;font-size:12px}
+  @media (prefers-color-scheme:dark){.fico{background:rgba(255,255,255,.08)}}
+  .fmeta{min-width:0}
+  .fname{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+  .fsub{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .shardtag{background:rgba(0,0,0,.06);border-radius:4px;padding:0 5px;font-family:var(--mono);font-size:11px}
+  @media (prefers-color-scheme:dark){.shardtag{background:rgba(255,255,255,.08)}}
+  .stamp{font-size:11px;color:var(--muted);float:right;margin:4px 0 -2px 8px;display:flex;align-items:center;gap:3px}
+  .tick{color:var(--tick);font-size:14px;font-weight:700}
+  .tick.pending{color:var(--muted)}
+  .empty-chat{flex:1;display:grid;place-items:center;color:var(--muted);text-align:center;z-index:1;padding:20px}
+
+  /* composer */
+  .composer{min-height:62px;display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--side-active);z-index:2}
+  .composer .iconbtn{font-size:22px}
+  .stage{flex:1;background:var(--panel);border-radius:8px;padding:9px 14px;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:15px;min-height:42px}
+  .stage .chip{background:var(--out);color:var(--ink);border-radius:6px;padding:4px 10px;font-size:13px;display:flex;gap:8px;align-items:center}
+  .send{width:46px;height:46px;border-radius:50%;border:0;background:var(--wa-green);color:#fff;font-size:20px;cursor:pointer;flex:0 0 auto;display:grid;place-items:center}
+  .send:disabled{opacity:.4;cursor:default}
+
+  /* welcome (no chat selected, desktop) */
+  .welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--panel);color:var(--muted);text-align:center;gap:14px;border-bottom:6px solid var(--wa-green)}
+  .welcome .big{width:96px;height:96px;border-radius:50%;background:var(--wa-green);display:grid;place-items:center;color:#fff;font-size:40px}
+  .welcome h2{color:var(--ink);font-weight:500;margin:0}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .scrim.show{display:flex}
+  .modal{background:var(--panel);border-radius:12px;max-width:440px;width:100%;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.3)}
+  .modal h3{margin:0 0 4px}
+  .modal p{margin:0 0 16px;color:var(--muted);font-size:13.5px}
+  .modal label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .modal input{width:100%;font:inherit;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--search);color:var(--ink)}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  .btn{font:inherit;font-weight:600;font-size:14px;padding:9px 18px;border-radius:8px;border:0;background:var(--wa-green);color:#fff;cursor:pointer}
+  .btn.ghost{background:var(--search);color:var(--ink)}
+  .banner{display:none;position:fixed;top:0;left:0;right:0;background:#8a5b12;color:#fff;text-align:center;font-size:13px;padding:6px;z-index:60}
+
+  @media (max-width:820px){
+    .sidebar{width:100%;min-width:0}
+    .chat{display:none}
+    .app.show-chat .sidebar{display:none}
+    .app.show-chat .chat{display:flex}
+    .welcome{display:none}
+    .back{display:block}
+    .fname{max-width:52vw}
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo"></div>
-  <h1>VaultMesh · Operator Console</h1>
-  <div class="pills" id="pills">
-    <span class="pill">protocol <b id="p-proto">–</b></span>
-    <span class="pill">namespaces <b id="p-ns">–</b></span>
-    <span class="pill">intrusions <b id="p-intr">–</b></span>
-    <span class="pill">ledger <b id="p-chain">–</b></span>
-  </div>
-</header>
-<p class="banner" id="banner">Demo data — not connected to a live coordinator. Serve this page from a running coordinator to go live.</p>
-
-<main>
-  <nav>
-    <button data-tab="enroll" class="active">Enroll a node</button>
-    <button data-tab="nodes">Nodes &amp; namespaces</button>
-    <button data-tab="files">Files</button>
-  </nav>
-
-  <section id="tab-enroll" class="active">
-    <div class="card">
-      <h2>Enroll a node</h2>
-      <p class="sub">Registers an app, allocates a namespace, and issues a CA-signed mTLS client identity — the full bundle a new node-agent needs to join.</p>
-      <label for="label">Label (operator-only, e.g. "alice-laptop")</label>
-      <input type="text" id="label" placeholder="node" />
-      <br/><button class="btn" id="enrollBtn">Issue identity &amp; namespace</button>
-      <div class="result" id="enrollResult">
-        <div class="kv">
-          <div>app id</div><div class="mono" id="r-app"></div>
-          <div>namespace</div><div class="mono" id="r-ns"></div>
-        </div>
-        <div class="dl">
-          <button class="btn ghost" data-dl="client.pem" id="dl-cert">⬇ client.pem</button>
-          <button class="btn ghost" data-dl="client.key" id="dl-key">⬇ client.key</button>
-          <button class="btn ghost" data-dl="ca-root.pem" id="dl-ca">⬇ ca-root.pem</button>
-        </div>
-        <label>Start the remote node-agent with:</label>
-        <pre id="r-cmd"></pre>
+<div class="banner" id="banner">Offline demo — not connected to a live coordinator.</div>
+<div class="app" id="app">
+  <!-- sidebar -->
+  <div class="sidebar">
+    <div class="side-head">
+      <div class="logo">V</div>
+      <div class="title">VaultMesh</div>
+      <div class="icons">
+        <button class="iconbtn" id="newBtn" title="Enroll a node (new chat)">✚</button>
+        <button class="iconbtn" id="setBtn" title="Settings">⋮</button>
       </div>
     </div>
-  </section>
+    <div class="searchwrap"><input id="search" placeholder="Search or start a new chat" /></div>
+    <div class="chatlist" id="chatlist"></div>
+  </div>
 
-  <section id="tab-nodes">
-    <div class="card">
-      <h2>Namespaces</h2>
-      <p class="sub">Each enrolled node writes into its own opaque namespace. The coordinator never sees tenant identities — only these ids and byte/object counts.</p>
-      <table><thead><tr><th>Namespace</th><th>Objects</th><th>Bytes stored</th></tr></thead>
-      <tbody id="nsRows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody></table>
-    </div>
-  </section>
+  <!-- welcome (desktop, nothing selected) -->
+  <div class="welcome" id="welcome">
+    <div class="big">🔐</div>
+    <h2>VaultMesh Chat</h2>
+    <p>End-to-end encrypted, self-sovereign backup.<br/>Pick a vault on the left, or ✚ enroll a node to start.</p>
+  </div>
 
-  <section id="tab-files">
-    <div class="card">
-      <h2>Uploaded files</h2>
-      <p class="sub">Backups in a namespace. Sizes are ciphertext (client-side encrypted); the coordinator holds only manifests of shard references — never plaintext or names.</p>
-      <label for="nsPick">Namespace</label>
-      <select id="nsPick"></select>
-      <table><thead><tr><th>Blob id</th><th>Ciphertext</th><th>Shards</th><th>Created</th></tr></thead>
-      <tbody id="fileRows"><tr><td colspan="4" class="empty">Pick a namespace.</td></tr></tbody></table>
+  <!-- chat pane -->
+  <div class="chat" id="chatPane" style="display:none">
+    <div class="chat-head">
+      <button class="back" id="backBtn">←</button>
+      <div class="avatar" id="chAvatar" style="width:40px;height:40px;font-size:15px"></div>
+      <div class="ch-name"><div class="n" id="chName"></div><div class="s" id="chStatus"></div></div>
+      <button class="iconbtn" id="chMenu" title="Vault details">ⓘ</button>
     </div>
-  </section>
-</main>
+    <div class="messages" id="messages"></div>
+    <div class="composer" id="composer">
+      <button class="iconbtn" id="attachBtn" title="Attach a file">📎</button>
+      <input type="file" id="fileInput" style="display:none" />
+      <div class="stage" id="stage">Attach a file to back it up…</div>
+      <button class="send" id="sendBtn" disabled>➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- enroll modal -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <h3 id="mTitle">Enroll a node</h3>
+    <p id="mDesc">Creates a new encrypted vault: registers an app + namespace and issues a CA-signed mTLS identity.</p>
+    <div id="mBody">
+      <label>Label (e.g. "alice-laptop")</label>
+      <input id="mLabel" placeholder="node" />
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="mCancel">Cancel</button>
+      <button class="btn" id="mOk">Create vault</button>
+    </div>
+  </div>
+</div>
 
 <script>
-const $ = s => document.querySelector(s);
-let LIVE = true, LAST = null;
+const $=s=>document.querySelector(s);
+const CO=location.origin;
+const nodeUrl=()=>localStorage.getItem('vm.nodeUrl')||`${location.protocol}//${location.hostname}:8790`;
+let LIVE=true, MODEL={}, ACTIVE=null, STAGED=null;
 
-async function api(path, opts){
-  const r = await fetch(path, opts);
-  if(!r.ok) throw new Error(path + " → " + r.status);
-  return r.json();
+const chats=JSON.parse(localStorage.getItem('vm.chats')||'{}');   // ns -> {app_id,label,createdAt}
+const fileNames=JSON.parse(localStorage.getItem('vm.files')||'{}');// ns -> {blob:{name}}
+const saveChats=()=>localStorage.setItem('vm.chats',JSON.stringify(chats));
+const saveFiles=()=>localStorage.setItem('vm.files',JSON.stringify(fileNames));
+
+async function api(path,opts){const r=await fetch(path,opts);if(!r.ok)throw new Error(path+' → '+r.status);
+  const t=await r.text();return t?JSON.parse(t):{};}
+const fmtBytes=n=>{n=Number(n)||0;const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++;}return (i?n.toFixed(1):n)+' '+u[i];};
+const hhmm=ms=>new Date(Number(ms)||Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+const dayLabel=ms=>{const d=new Date(Number(ms)||Date.now());const t=new Date();const y=new Date(t);y.setDate(t.getDate()-1);
+  const s=x=>x.toDateString();return s(d)===s(t)?'Today':s(d)===s(y)?'Yesterday':d.toLocaleDateString([], {day:'numeric',month:'short',year:'numeric'});};
+const short=ns=>ns.length>16?ns.slice(0,10)+'…'+ns.slice(-4):ns;
+function color(str){let h=0;for(const c of str)h=(h*31+c.charCodeAt(0))%360;return `hsl(${h} 45% 45%)`;}
+function initials(s){s=s.replace(/^ns-|^blob-/,'');return s.slice(0,2).toUpperCase();}
+
+/* ---------- crypto (WebCrypto: PBKDF2 + AES-256-GCM) ---------- */
+async function deriveKey(pass,salt){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+async function encryptBytes(pass,bytes){
+  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveKey(pass,salt);
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,bytes));
+  const f=new Uint8Array(28+ct.length);f.set(salt,0);f.set(iv,16);f.set(ct,28);return f;}
+async function decryptBytes(pass,f){
+  const salt=f.slice(0,16),iv=f.slice(16,28),ct=f.slice(28);const key=await deriveKey(pass,salt);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct));}
+const b64enc=u8=>{let s='';const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
+const b64dec=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
+
+const keyOf=ns=>sessionStorage.getItem('vm.key.'+ns);
+function ensureKey(ns){let k=keyOf(ns);if(k)return k;
+  k=prompt('This vault is end-to-end encrypted.\nEnter its encryption key for "'+(chats[ns]?.label||short(ns))+'":');
+  if(k)sessionStorage.setItem('vm.key.'+ns,k);return k;}
+
+async function mintToken(ns,op){const app_id=chats[ns].app_id;
+  const r=await api(CO+'/v1/capabilities',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({app_id,namespace:ns,operation:op,ttl_secs:300})});return r.token;}
+
+/* ---------- data ---------- */
+async function loadChats(){
+  let ids;
+  try{ids=await api(CO+'/v1/meta/namespaces');}catch(e){return goDemo();}
+  MODEL={};
+  for(const ns of ids){
+    let blobs=[];try{blobs=await api(CO+'/v1/meta/namespaces/'+ns+'/blobs');}catch(e){}
+    MODEL[ns]={ns,owned:!!chats[ns],label:chats[ns]?.label||short(ns),count:blobs.length,blobs,files:null,last:chats[ns]?.createdAt||0};
+  }
+  // owned chats with zero server presence still show
+  for(const ns in chats){if(!MODEL[ns])MODEL[ns]={ns,owned:true,label:chats[ns].label,count:0,blobs:[],files:null,last:chats[ns].createdAt||0};}
+  renderList();
 }
-const fmtBytes = n => { n=Number(n)||0; const u=["B","KB","MB","GB","TB"]; let i=0;
-  while(n>=1024&&i<u.length-1){n/=1024;i++;} return (i?n.toFixed(1):n)+" "+u[i]; };
-const fmtTime = ms => { const v=Number(ms)||0; return v? new Date(v).toISOString().replace("T"," ").slice(0,19)+"Z":"–"; };
+function goDemo(){LIVE=false;$('#banner').style.display='block';
+  const demo=['ns-7f3c2a19b0e84d51','ns-4e0d4082f0ed4000'];
+  MODEL={};demo.forEach((ns,i)=>MODEL[ns]={ns,owned:i===0,label:i===0?'my-laptop':short(ns),count:i?3:1,blobs:[],files:[
+    {blob:'blob-demo1',name:i?'vm-snapshot.img':'passwords.kdbx',size:i?512000:88000,shards:6,ts:Date.now()-i*86400000}
+  ],last:Date.now()});
+  renderList();}
 
-// ---- demo data (used when no live coordinator is reachable) ----
-const DEMO = {
-  status:{protocol_version:"vaultmesh/1",namespaces:2,intrusion_count:1,intrusion_chain_valid:true},
-  namespaces:["ns-7f3c2a19b0e84d51","ns-4e0d4082f0ed4000"],
-  usage:{"ns-7f3c2a19b0e84d51":{bytes:200000,objects:1},"ns-4e0d4082f0ed4000":{bytes:1536000,objects:3}},
-  blobs:{"ns-7f3c2a19b0e84d51":["blob-334a37d6772d4c64"],
-         "ns-4e0d4082f0ed4000":["blob-9efb37632f764bb7","blob-1a2b3c4d5e6f7081","blob-aa11bb22cc33dd44"]},
-  manifest:id=>({blob_id:id,ciphertext_len:512000,created_at:1754939339000,
-    shards:[{},{},{},{},{},{}]})
+function renderList(){
+  const q=($('#search').value||'').toLowerCase();
+  const items=Object.values(MODEL).sort((a,b)=>(b.last||0)-(a.last||0))
+    .filter(c=>c.label.toLowerCase().includes(q)||c.ns.includes(q));
+  const box=$('#chatlist');box.innerHTML='';
+  if(!items.length){box.innerHTML='<div style="padding:24px;color:var(--muted);text-align:center;font-size:14px">No vaults yet. Tap ✚ to enroll a node.</div>';return;}
+  for(const c of items){
+    const el=document.createElement('div');el.className='chat-item'+(c.ns===ACTIVE?' active':'');
+    el.innerHTML=`<div class="avatar" style="background:${color(c.ns)}">${initials(c.label||c.ns)}</div>
+      <div class="ci-main"><div class="ci-top"><span class="ci-name">${c.label}</span>
+      <span class="ci-time">${c.last?hhmm(c.last):''}</span></div>
+      <div class="ci-sub">${c.owned?'<span class="lock">🔒</span>':'<span class="viewonly">view only</span>'}
+      <span>${c.count} file${c.count===1?'':'s'}</span>${c.count?`<span class="badge">${c.count}</span>`:''}</div></div>`;
+    el.onclick=()=>openChat(c.ns);box.appendChild(el);
+  }
+}
+
+async function openChat(ns){
+  ACTIVE=ns;const c=MODEL[ns];renderList();
+  $('#welcome').style.display='none';$('#chatPane').style.display='flex';$('#app').classList.add('show-chat');
+  $('#chAvatar').style.background=color(ns);$('#chAvatar').textContent=initials(c.label||ns);
+  $('#chName').textContent=c.label;
+  $('#chStatus').textContent=c.owned?'🔒 end-to-end encrypted · '+short(ns):'view only · '+short(ns);
+  $('#composer').style.display=c.owned?'flex':'none';
+  const M=$('#messages');M.innerHTML='<div class="empty-chat">Loading…</div>';
+  // fetch manifests
+  let files=[];
+  if(LIVE){
+    for(const b of c.blobs){let m={};try{m=await api(CO+'/v1/meta/namespaces/'+ns+'/manifests/'+b);}catch(e){}
+      files.push({blob:b,name:(fileNames[ns]&&fileNames[ns][b]&&fileNames[ns][b].name)||b,
+        size:m?m.ciphertext_len:0,shards:(m&&m.shards)?m.shards.length:'–',ts:m?m.created_at:0});}
+  } else { files=c.files||[]; }
+  files.sort((a,b)=>(a.ts||0)-(b.ts||0));c.files=files;renderMessages(ns,files);
+}
+
+function renderMessages(ns,files){
+  const M=$('#messages');M.innerHTML='';const owned=MODEL[ns].owned;
+  if(!files.length){M.innerHTML='<div class="empty-chat">No files yet.<br/>'+(owned?'Attach one below to back it up — it’s encrypted on this device first.':'This vault was enrolled elsewhere; you can view it but not decrypt its files.')+'</div>';return;}
+  let lastDay='';
+  for(const f of files){
+    const day=dayLabel(f.ts);
+    if(day!==lastDay){lastDay=day;const d=document.createElement('div');d.className='daysep';d.textContent=day;M.appendChild(d);}
+    const el=document.createElement('div');el.className='msg '+(owned?'out':'in');
+    const ext=(f.name.split('.').pop()||'DOC').slice(0,4).toUpperCase();
+    el.innerHTML=`<div class="filecard"><div class="fico">${ext}</div>
+      <div class="fmeta"><div class="fname">${f.name}</div>
+      <div class="fsub"><span>${fmtBytes(f.size)}</span><span class="shardtag">${f.shards} shards</span></div></div></div>
+      <div class="stamp">${f.ts?hhmm(f.ts):''}${owned?'<span class="tick">✓✓</span>':''}</div>`;
+    if(owned)el.querySelector('.filecard').onclick=()=>restore(ns,f);
+    M.appendChild(el);
+  }
+  M.scrollTop=M.scrollHeight;
+}
+
+/* ---------- send / restore ---------- */
+$('#attachBtn').onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>{const f=e.target.files[0];if(!f)return;STAGED=f;
+  $('#stage').innerHTML=`<span class="chip">📄 ${f.name} · ${fmtBytes(f.size)} <b style="cursor:pointer" id="unstage">✕</b></span>`;
+  $('#unstage').onclick=()=>{STAGED=null;$('#stage').textContent='Attach a file to back it up…';$('#sendBtn').disabled=true;};
+  $('#sendBtn').disabled=false;e.target.value='';};
+$('#sendBtn').onclick=async()=>{
+  if(!STAGED||!ACTIVE)return;const ns=ACTIVE,file=STAGED;
+  const key=ensureKey(ns);if(!key)return;
+  $('#sendBtn').disabled=true;
+  // optimistic bubble
+  const M=$('#messages');const el=document.createElement('div');el.className='msg out';
+  const ext=(file.name.split('.').pop()||'DOC').slice(0,4).toUpperCase();
+  el.innerHTML=`<div class="filecard"><div class="fico">${ext}</div><div class="fmeta">
+    <div class="fname">${file.name}</div><div class="fsub"><span>${fmtBytes(file.size)}</span><span class="shardtag">encrypting…</span></div></div></div>
+    <div class="stamp">${hhmm(Date.now())}<span class="tick pending">🕓</span></div>`;
+  M.appendChild(el);M.scrollTop=M.scrollHeight;
+  try{
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    const frame=await encryptBytes(key,bytes);
+    const token=await mintToken(ns,'Put');
+    const r=await api(nodeUrl()+'/v1/backups',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({namespace:ns,token,ciphertext_b64:b64enc(frame)})});
+    fileNames[ns]=fileNames[ns]||{};fileNames[ns][r.blob_id]={name:file.name};saveFiles();
+    el.querySelector('.shardtag').textContent='stored';
+    el.querySelector('.tick').className='tick';el.querySelector('.tick').textContent='✓✓';
+    STAGED=null;$('#stage').textContent='Attach a file to back it up…';
+    if(chats[ns]){chats[ns].createdAt=Date.now();saveChats();}
+    await loadChats();openChat(ns);
+  }catch(e){el.querySelector('.shardtag').textContent='failed: '+e.message;
+    el.querySelector('.tick').textContent='⚠';alert('Upload failed: '+e.message+'\nIs the node-agent reachable at '+nodeUrl()+' ?');}
 };
 
-// ---- header status ----
-async function loadStatus(){
+async function restore(ns,f){
+  const key=ensureKey(ns);if(!key)return;
   try{
-    const s = await api("/v1/admin/status");
-    $("#p-proto").textContent=s.protocol_version;
-    $("#p-ns").textContent=s.namespaces;
-    $("#p-intr").textContent=s.intrusion_count;
-    $("#p-chain").textContent=s.intrusion_chain_valid?"valid ✓":"BROKEN";
-  }catch(e){ goDemo(); const s=DEMO.status;
-    $("#p-proto").textContent=s.protocol_version;$("#p-ns").textContent=s.namespaces;
-    $("#p-intr").textContent=s.intrusion_count;$("#p-chain").textContent="valid ✓"; }
+    const token=await mintToken(ns,'Get');
+    const r=await api(nodeUrl()+'/v1/backups/get',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({namespace:ns,token,blob_id:f.blob})});
+    const plain=await decryptBytes(key,b64dec(r.ciphertext_b64));
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([plain]));a.download=f.name;a.click();
+  }catch(e){alert('Restore failed: '+e.message);}
 }
-function goDemo(){ if(!LIVE) return; LIVE=false; $("#banner").style.display="block"; }
 
-// ---- enroll ----
-$("#enrollBtn").addEventListener("click", async ()=>{
-  const btn=$("#enrollBtn"); btn.disabled=true;
-  const label=$("#label").value.trim()||"node";
+/* ---------- enroll (new chat) ---------- */
+$('#newBtn').onclick=()=>{$('#mLabel').value='';$('#scrim').classList.add('show');setTimeout(()=>$('#mLabel').focus(),50);};
+$('#mCancel').onclick=()=>$('#scrim').classList.remove('show');
+$('#mOk').onclick=async()=>{
+  const label=$('#mLabel').value.trim()||'node';$('#mOk').disabled=true;
   try{
     let res;
-    if(LIVE){ res = await api("/v1/admin/enroll",{method:"POST",
-      headers:{"content-type":"application/json"},body:JSON.stringify({label})}); }
-    else { res = demoEnroll(label); }
-    LAST=res;
-    $("#r-app").textContent=res.app_id;
-    $("#r-ns").textContent=res.namespace;
-    $("#r-cmd").textContent=
-`VAULT_COORDINATOR_URL=https://<coordinator>:8787 \\
-VAULT_CA_CERT=ca-root.pem \\
-VAULT_CLIENT_CERT=client.pem VAULT_CLIENT_KEY=client.key \\
-VAULT_ANCHOR=presigned \\
-  node-agent`;
-    $("#enrollResult").classList.add("show");
-    loadStatus(); loadNamespaces();
-  }catch(e){ alert("enroll failed: "+e.message); }
-  finally{ btn.disabled=false; }
-});
-function demoEnroll(label){ const rnd=()=>Math.random().toString(16).slice(2,18);
-  return {label,app_id:"app-"+rnd(),namespace:"ns-"+rnd(),
-    client_cert_pem:"-----BEGIN CERTIFICATE-----\n(demo)\n-----END CERTIFICATE-----\n",
-    client_key_pem:"-----BEGIN PRIVATE KEY-----\n(demo)\n-----END PRIVATE KEY-----\n",
-    ca_root_pem:"-----BEGIN CERTIFICATE-----\n(demo ca)\n-----END CERTIFICATE-----\n"}; }
-document.querySelectorAll("[data-dl]").forEach(b=>b.addEventListener("click",()=>{
-  if(!LAST) return; const map={"client.pem":LAST.client_cert_pem,
-    "client.key":LAST.client_key_pem,"ca-root.pem":LAST.ca_root_pem};
-  const name=b.dataset.dl, blob=new Blob([map[name]],{type:"application/x-pem-file"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
-}));
-
-// ---- namespaces ----
-async function loadNamespaces(){
-  let ids, usage={};
-  try{ ids = LIVE ? await api("/v1/meta/namespaces") : DEMO.namespaces; }
-  catch(e){ goDemo(); ids = DEMO.namespaces; }
-  const rows=$("#nsRows"), pick=$("#nsPick"); rows.innerHTML=""; pick.innerHTML="";
-  if(!ids.length){ rows.innerHTML='<tr><td colspan="3" class="empty">No namespaces yet — enroll a node.</td></tr>'; return; }
-  for(const ns of ids){
-    let u; try{ u = LIVE ? await api("/v1/meta/namespaces/"+ns+"/usage") : DEMO.usage[ns]||{bytes:0,objects:0}; }
-    catch(e){ u=DEMO.usage[ns]||{bytes:0,objects:0}; }
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${ns}</td><td>${u.objects}</td><td>${fmtBytes(u.bytes)}</td>`;
-    rows.appendChild(tr);
-    const o=document.createElement("option"); o.value=ns; o.textContent=ns; pick.appendChild(o);
-  }
-  if(pick.value) loadFiles(pick.value);
+    if(LIVE){res=await api(CO+'/v1/admin/enroll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({label})});}
+    else{res={label,app_id:'app-demo',namespace:'ns-'+Math.random().toString(16).slice(2,18),
+      client_cert_pem:'(demo)',client_key_pem:'(demo)',ca_root_pem:'(demo)'};}
+    chats[res.namespace]={app_id:res.app_id,label,createdAt:Date.now()};saveChats();
+    window.__lastEnroll=res;
+    $('#scrim').classList.remove('show');
+    await loadChats();openChat(res.namespace);showEnrollCard(res);
+  }catch(e){alert('Enroll failed: '+e.message);}finally{$('#mOk').disabled=false;}
+};
+function showEnrollCard(res){
+  const M=$('#messages');const el=document.createElement('div');el.className='sysmsg';
+  el.innerHTML=`<b>🔐 Vault created & node enrolled.</b>
+    <div class="kv"><b>app id</b><span class="mono">${res.app_id}</span>
+    <b>namespace</b><span class="mono">${res.namespace}</span></div>
+    Download this node’s mTLS identity, then start its node-agent:
+    <div class="dlrow">
+      <button class="btn ghost" data-p="client_cert_pem" data-f="client.pem">⬇ client.pem</button>
+      <button class="btn ghost" data-p="client_key_pem" data-f="client.key">⬇ client.key</button>
+      <button class="btn ghost" data-p="ca_root_pem" data-f="ca-root.pem">⬇ ca-root.pem</button>
+    </div>`;
+  el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
+    const blob=new Blob([res[b.dataset.p]],{type:'application/x-pem-file'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=b.dataset.f;a.click();});
+  M.appendChild(el);M.scrollTop=M.scrollHeight;
 }
 
-// ---- files ----
-async function loadFiles(ns){
-  const rows=$("#fileRows"); rows.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
-  let blobs;
-  try{ blobs = LIVE ? await api("/v1/meta/namespaces/"+ns+"/blobs") : (DEMO.blobs[ns]||[]); }
-  catch(e){ goDemo(); blobs = DEMO.blobs[ns]||[]; }
-  if(!blobs.length){ rows.innerHTML='<tr><td colspan="4" class="empty">No files in this namespace.</td></tr>'; return; }
-  rows.innerHTML="";
-  for(const b of blobs){
-    let m; try{ m = LIVE ? await api("/v1/meta/namespaces/"+ns+"/manifests/"+b) : DEMO.manifest(b); }
-    catch(e){ m = DEMO.manifest(b); }
-    const shards=(m&&m.shards)?m.shards.length:"–", len=m?m.ciphertext_len:0, ts=m?m.created_at:0;
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td class="mono">${b}</td><td>${fmtBytes(len)}</td><td><span class="tag">${shards}</span></td><td class="mono">${fmtTime(ts)}</td>`;
-    rows.appendChild(tr);
-  }
-}
-$("#nsPick").addEventListener("change", e=>loadFiles(e.target.value));
+/* ---------- settings ---------- */
+$('#setBtn').onclick=()=>{
+  const cur=nodeUrl();const v=prompt('node-agent data-plane URL (where files are uploaded/restored):',cur);
+  if(v!==null){localStorage.setItem('vm.nodeUrl',v.trim());alert('Saved. node-agent = '+nodeUrl());}
+};
+$('#chMenu').onclick=()=>{if(window.__lastEnroll&&window.__lastEnroll.namespace===ACTIVE)showEnrollCard(window.__lastEnroll);
+  else alert('Vault '+ACTIVE+'\n'+(MODEL[ACTIVE].owned?'You own this vault (can upload & restore).':'View-only — enrolled on another device.'));};
+$('#backBtn').onclick=()=>{$('#app').classList.remove('show-chat');ACTIVE=null;renderList();};
+$('#search').oninput=renderList;
 
-// ---- tabs ----
-document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
-  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
-  document.querySelectorAll("section").forEach(x=>x.classList.remove("active"));
-  b.classList.add("active"); $("#tab-"+b.dataset.tab).classList.add("active");
-  if(b.dataset.tab==="nodes"||b.dataset.tab==="files") loadNamespaces();
-}));
-
-// ---- boot ----
-loadStatus(); loadNamespaces();
+loadChats();
 </script>
 </body>
 </html>

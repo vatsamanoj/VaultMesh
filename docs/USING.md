@@ -179,29 +179,44 @@ rejected (`certificate required`); a **different-CA** client cert → rejected
 
 `VAULT_TLS_SANS` (default `localhost,127.0.0.1`) sets the server cert's names.
 
-## Operator console (browser UI)
+## Chat UI (WhatsApp-style, any device)
 
-The coordinator serves a self-contained web console at `/` — no build step, no
-external assets. From a browser you can:
+The coordinator serves a self-contained, responsive **chat app** at `/` — no
+build step, no external assets, works on desktop and mobile. The metaphor maps
+onto VaultMesh directly:
 
-- **Enroll a node** — one click registers an app, allocates a namespace, and
-  issues a CA-signed mTLS client identity; download `client.pem`/`client.key`/
-  `ca-root.pem` and copy the ready-to-run node-agent command.
-- **Nodes & namespaces** — see every opaque namespace with its object/byte counts.
-- **Files** — browse the backups in a namespace: blob id, ciphertext size, shard
-  count, and timestamp (never plaintext or filenames — those stay client-side).
+- **Each vault (namespace) is a chat.** Owned vaults (enrolled from this browser)
+  show a 🔒 and can send/restore; vaults enrolled elsewhere appear **view-only**.
+- **Each backed-up file is a message** — a document bubble with name, ciphertext
+  size, shard count, time, and a ✓✓ once stored.
+- **✚ enrolls a node** (starts a new chat): registers an app + namespace and
+  issues a CA-signed mTLS identity, shown as a system message with download
+  buttons for `client.pem`/`client.key`/`ca-root.pem`.
+- **📎 attaches a file → send backs it up.** The browser encrypts client-side
+  (WebCrypto: PBKDF2 + AES-256-GCM) with a per-vault key you set, then uploads
+  ciphertext to the node-agent. Tapping a file bubble restores + decrypts it.
 
 ```sh
 coordinator                       # then open http://127.0.0.1:8787/
 ```
 
-Enrollment is one endpoint too: `POST /v1/admin/enroll {"label":"alice-laptop"}`
-returns `{app_id, namespace, client_cert_pem, client_key_pem, ca_root_pem}`.
+Two planes are involved, same as everywhere else:
 
-The console is an **admin-plane** surface: serve it over localhost or the private
-overlay. Because a browser can't easily present a client cert, run the console
-plane in plain HTTP behind the overlay (or before enabling `VAULT_TLS_MODE=mtls`
-on a public bind) rather than exposing it publicly.
+- **Control plane** (same origin as the page): enroll, list vaults/files, mint
+  capability tokens. `POST /v1/admin/enroll {"label":"alice-laptop"}` returns
+  `{app_id, namespace, client_cert_pem, client_key_pem, ca_root_pem}`.
+- **Data plane** (node-agent): the browser uploads/restores ciphertext to the
+  node-agent directly. Set its URL with the ⋮ menu (default
+  `http://<host>:8790`). The node-agent now sends permissive CORS so a browser
+  can reach it; every call still needs a capability token. Browser crypto needs
+  a **secure context**, so use `https://` or `localhost`/`127.0.0.1`.
+
+The console is an **admin/data-plane** surface: serve it over localhost or the
+private overlay, not the public internet. Because a browser can't easily present
+a client cert, run this plane in plain HTTP behind the overlay rather than
+behind `VAULT_TLS_MODE=mtls`. Files sent from the browser use a browser-native
+key scheme (PBKDF2), so they interoperate with other browser clients, not with
+`vaultfile.py` (which uses scrypt) — pick one client per vault.
 
 ## Self-hosting on your own machine (public IP + router, no cloud)
 

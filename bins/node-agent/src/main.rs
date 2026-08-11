@@ -18,6 +18,7 @@
 //! - `VAULT_CLIENT_CERT`/`VAULT_CLIENT_KEY`/`VAULT_CA_CERT`  mTLS identity + CA
 //!   the node-agent presents to (and trusts on) an mTLS coordinator.
 
+mod cors;
 mod http;
 mod presigned_anchor;
 mod remote_meta;
@@ -192,6 +193,8 @@ fn router(state: AppState) -> Router {
         )
         // Maintenance plane: on-demand self-healing repair.
         .route("/v1/maintenance/repair", post(routes::repair))
+        // Let a browser chat client reach the data plane cross-origin.
+        .layer(axum::middleware::from_fn(cors::permissive))
         .with_state(state)
 }
 
