@@ -214,9 +214,23 @@ Two planes are involved, same as everywhere else:
 The console is an **admin/data-plane** surface: serve it over localhost or the
 private overlay, not the public internet. Because a browser can't easily present
 a client cert, run this plane in plain HTTP behind the overlay rather than
-behind `VAULT_TLS_MODE=mtls`. Files sent from the browser use a browser-native
-key scheme (PBKDF2), so they interoperate with other browser clients, not with
-`vaultfile.py` (which uses scrypt) — pick one client per vault.
+behind `VAULT_TLS_MODE=mtls`.
+
+### One encryption envelope for every client
+
+The browser chat client and `vaultfile.py` share a single, self-describing
+content format, so the **same passphrase decrypts a file from either client**:
+
+```
+b"VMB1" | salt(16) | iters(uint32 BE) | iv(12) | AES-256-GCM(ciphertext+tag, aad="VMB1")
+key = PBKDF2-HMAC-SHA256(passphrase, salt, iters, 32 bytes)
+```
+
+The salt and iteration count travel inside each file, so files are portable and
+need no shared config. Verified both ways plus end-to-end: a file uploaded from
+the chat UI restores byte-identical under `vaultfile.py`, and vice versa.
+(`vaultfile.py` still restores older scrypt-format backups via a legacy
+fallback.)
 
 ## Self-hosting on your own machine (public IP + router, no cloud)
 

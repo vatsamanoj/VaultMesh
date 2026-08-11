@@ -202,18 +202,27 @@ const short=ns=>ns.length>16?ns.slice(0,10)+'…'+ns.slice(-4):ns;
 function color(str){let h=0;for(const c of str)h=(h*31+c.charCodeAt(0))%360;return `hsl(${h} 45% 45%)`;}
 function initials(s){s=s.replace(/^ns-|^blob-/,'');return s.slice(0,2).toUpperCase();}
 
-/* ---------- crypto (WebCrypto: PBKDF2 + AES-256-GCM) ---------- */
-async function deriveKey(pass,salt){
+/* ---------- crypto: canonical VaultMesh envelope v1 (shared with vaultfile.py)
+   b"VMB1" | salt(16) | iters(uint32 BE) | iv(12) | AES-256-GCM(ct+tag, aad="VMB1")
+   KDF = PBKDF2-HMAC-SHA256. Same passphrase decrypts either client. ---------- */
+const MAGIC=new Uint8Array([0x56,0x4d,0x42,0x31]); // "VMB1"
+const KDF_ITERS=200000;
+async function deriveKey(pass,salt,iters){
   const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:iters,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
 async function encryptBytes(pass,bytes){
   const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
-  const key=await deriveKey(pass,salt);
-  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,bytes));
-  const f=new Uint8Array(28+ct.length);f.set(salt,0);f.set(iv,16);f.set(ct,28);return f;}
+  const key=await deriveKey(pass,salt,KDF_ITERS);
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:MAGIC},key,bytes));
+  const f=new Uint8Array(36+ct.length);let o=0;
+  f.set(MAGIC,o);o+=4;f.set(salt,o);o+=16;
+  f[o++]=(KDF_ITERS>>>24)&255;f[o++]=(KDF_ITERS>>>16)&255;f[o++]=(KDF_ITERS>>>8)&255;f[o++]=KDF_ITERS&255;
+  f.set(iv,o);o+=12;f.set(ct,o);return f;}
 async function decryptBytes(pass,f){
-  const salt=f.slice(0,16),iv=f.slice(16,28),ct=f.slice(28);const key=await deriveKey(pass,salt);
-  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct));}
+  if(f.length<36||f[0]!==0x56||f[1]!==0x4d||f[2]!==0x42||f[3]!==0x31)throw new Error('not a VaultMesh (VMB1) file');
+  const salt=f.slice(4,20);const iters=((f[20]<<24)|(f[21]<<16)|(f[22]<<8)|f[23])>>>0;
+  const iv=f.slice(24,36),ct=f.slice(36);const key=await deriveKey(pass,salt,iters);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv,additionalData:MAGIC},key,ct));}
 const b64enc=u8=>{let s='';const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
 const b64dec=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
 

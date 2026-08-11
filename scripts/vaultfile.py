@@ -2,10 +2,17 @@
 """vaultfile.py - a real file backup/restore client for VaultMesh.
 
 This is a genuine "consuming app": it encrypts a file CLIENT-SIDE with
-AES-256-GCM (key derived from your passphrase), hands the opaque ciphertext to
-the local node-agent, and keeps its own name -> blob_id catalog. VaultMesh never
-sees the passphrase, the key, or the plaintext. Restore fetches the ciphertext,
-decrypts it, and writes the file back byte-identical.
+AES-256-GCM (key derived from your passphrase via PBKDF2-HMAC-SHA256), hands the
+opaque ciphertext to the local node-agent, and keeps its own name -> blob_id
+catalog. VaultMesh never sees the passphrase, the key, or the plaintext. Restore
+fetches the ciphertext, decrypts it, and writes the file back byte-identical.
+
+Files use the canonical, self-describing VaultMesh envelope v1 so they are
+interchangeable with the browser chat client (same passphrase decrypts either):
+
+    b"VMB1" | salt(16) | iters(uint32 BE) | iv(12) | AES-256-GCM(ct+tag, aad="VMB1")
+
+Older scrypt-format backups still restore (legacy fallback below).
 
 Requires:  pip install cryptography
 
@@ -22,6 +29,7 @@ Environment:
   VAULT_PASSPHRASE        your content key (required for backup/restore)
 """
 import base64
+import hashlib
 import json
 import os
 import ssl
@@ -31,6 +39,10 @@ import urllib.request
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+# Canonical VaultMesh envelope v1 — shared byte-for-byte with the browser client.
+MAGIC = b"VMB1"
+KDF_ITERS = 200_000
 
 COORD = os.environ.get("VAULT_COORDINATOR_URL", "http://127.0.0.1:8787")
 SIDECAR = os.environ.get("VAULT_SIDECAR_URL", "http://127.0.0.1:8790")
@@ -75,12 +87,35 @@ def save_cfg(cfg):
         json.dump(cfg, f, indent=2)
 
 
-def content_key(cfg):
+def pw_of():
     pw = os.environ.get("VAULT_PASSPHRASE")
     if not pw:
         raise SystemExit("set VAULT_PASSPHRASE (your content key) first")
-    salt = bytes.fromhex(cfg["kdf_salt"])
-    return Scrypt(salt=salt, length=32, n=2**14, r=8, p=1).derive(pw.encode())
+    return pw
+
+
+def _derive(pw, salt, iters):
+    return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iters, dklen=32)
+
+
+def encrypt(pw, plaintext):
+    """Canonical envelope v1: MAGIC | salt(16) | iters(uint32 BE) | iv(12) | ct."""
+    salt = os.urandom(16)
+    iv = os.urandom(12)
+    ct = AESGCM(_derive(pw, salt, KDF_ITERS)).encrypt(iv, plaintext, MAGIC)
+    return MAGIC + salt + KDF_ITERS.to_bytes(4, "big") + iv + ct
+
+
+def decrypt(pw, blob, legacy_salt_hex=None):
+    """Decrypt a v1 envelope; fall back to the legacy scrypt format if present."""
+    if blob[:4] == MAGIC:
+        salt, iters = blob[4:20], int.from_bytes(blob[20:24], "big")
+        iv, ct = blob[24:36], blob[36:]
+        return AESGCM(_derive(pw, salt, iters)).decrypt(iv, ct, MAGIC)
+    if not legacy_salt_hex:
+        raise SystemExit("unrecognized ciphertext and no legacy kdf_salt to fall back on")
+    key = Scrypt(salt=bytes.fromhex(legacy_salt_hex), length=32, n=2**14, r=8, p=1).derive(pw.encode())
+    return AESGCM(key).decrypt(blob[:12], blob[12:], None)
 
 
 def token(cfg, op):
@@ -109,10 +144,8 @@ def cmd_backup(path, name=None):
     name = name or os.path.basename(path)
     plaintext = open(path, "rb").read()
 
-    # Client-side encrypt: nonce(12) || AES-256-GCM(ciphertext+tag).
-    key = content_key(cfg)
-    nonce = os.urandom(12)
-    blob = nonce + AESGCM(key).encrypt(nonce, plaintext, None)
+    # Client-side encrypt into the canonical envelope (see module docstring).
+    blob = encrypt(pw_of(), plaintext)
 
     r = _post(f"{SIDECAR}/v1/backups", {
         "namespace": cfg["namespace"], "token": token(cfg, "Put"),
@@ -139,8 +172,7 @@ def cmd_restore(name, out):
     r = _post(f"{SIDECAR}/v1/backups/get", {
         "namespace": cfg["namespace"], "token": token(cfg, "Get"), "blob_id": entry["blob_id"]})
     blob = base64.b64decode(r["ciphertext_b64"])
-    nonce, ct = blob[:12], blob[12:]
-    plaintext = AESGCM(content_key(cfg)).decrypt(nonce, ct, None)
+    plaintext = decrypt(pw_of(), blob, cfg.get("kdf_salt"))
     with open(out, "wb") as f:
         f.write(plaintext)
     print(f"restored '{name}' -> {out} ({len(plaintext)} bytes)")
