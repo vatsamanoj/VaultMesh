@@ -12,8 +12,12 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 PY="${PYTHON:-python3}"
 CO_PORT="${CO_PORT:-8787}"
 NODE_PORT="${NODE_PORT:-8790}"
+# shellcheck source=lib.sh
+. "$HERE/lib.sh"
 
 cd "$ROOT"
+echo "== preflight: ports $CO_PORT $NODE_PORT =="
+require_free_ports "$CO_PORT" "$NODE_PORT"
 echo "== building coordinator + node-agent (release) =="
 cargo build --release -p coordinator -p node-agent
 

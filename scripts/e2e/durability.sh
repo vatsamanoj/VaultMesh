@@ -11,8 +11,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 PY="${PYTHON:-python3}"
 CO=127.0.0.1:8787; A=127.0.0.1:8790; B=127.0.0.1:8791
+# shellcheck source=lib.sh
+. "$HERE/lib.sh"
 cd "$ROOT"
 
+echo "== preflight: ports 8787 8790 8791 =="
+require_free_ports 8787 8790 8791
 echo "== build =="
 cargo build --release -p coordinator -p node-agent >/dev/null 2>&1
 WORK="$(mktemp -d)"; ANCHOR_A="$WORK/anchorA"; ANCHOR_B="$WORK/anchorB"

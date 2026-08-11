@@ -31,5 +31,17 @@ PLAYWRIGHT_CHROME=/path/to/chromium \
 - The chat UI must be reached over a **secure context** (`http://127.0.0.1` /
   `localhost` or `https://`) or WebCrypto is unavailable and the upload fails.
 
-Exit code is `0` on PASS, `1` on FAIL. If the boot step reports an address
-already in use, kill stale `coordinator`/`node-agent` processes first.
+Exit code is `0` on PASS, `1` on FAIL.
+
+Both scripts run a **port preflight** first (`lib.sh`): if a required port is
+busy they reap stale VaultMesh `coordinator`/`node-agent` processes left by an
+earlier run and re-check, and only abort if a port is still held by an unrelated
+process — so back-to-back runs don't trip over orphaned servers.
+
+## Files
+
+- `run.sh` — boot + tap-to-restore round-trip (`roundtrip.py`).
+- `durability.sh` — 2-node mesh durability drill (shard loss, self-heal,
+  peer-assisted repair).
+- `lib.sh` — shared port-preflight helpers.
+- `roundtrip.py` — the Playwright round-trip test.
