@@ -15,3 +15,7 @@ Cargo.lock.orig
 .idea/
 .vscode/
 *.swp
+
+# Python bytecode cache (e.g. from importing scripts/vaultfile.py)
+__pycache__/
+*.pyc
