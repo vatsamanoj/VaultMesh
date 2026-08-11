@@ -71,11 +71,32 @@ confirms real HTTP replication (both nodes hold all shards).
 `NatBroker` (hole-punch / coordinator relay) remains declared; the outbound-only
 HTTP transport needs no inbound port in dev, and direct QUIC transport is P4.
 
-## P3 — Repair loop + health + quotas/billing + admin dashboard
+## P3 — Repair loop + health + quotas/billing + perimeter + self-sovereignty  ← implemented
 
-Self-healing repair when nodes go dark; per-namespace quotas/billing; the
-`ThreatResponder` + `IntrusionSink` perimeter; `adapter-ddns` (`NameResolver`)
-and `adapter-rcgen-ca` (`CertAuthority`).
+Implemented here:
+- **Repair loop** — `RepairShards` use-case reconstructs missing/corrupt shards
+  on the anchor from the survivors (deterministic RS re-encode), re-replicating
+  to peers. The node-agent exposes `POST /v1/maintenance/repair` and an optional
+  background sweep (`VAULT_REPAIR_SECS`) over every known blob.
+- **Active perimeter** — `adapter-perimeter`: a hash-chained, tamper-evident
+  `IntrusionSink` (footprints) and an escalating `ThreatResponder`
+  (allow → tarpit → block, keyed on fingerprint, backing a mesh-wide blocklist).
+  Coordinator middleware records a footprint for every rejected request and
+  blocks repeat offenders at the earliest layer. Admin views:
+  `GET /v1/admin/intrusions`, `GET /v1/admin/status`.
+- **Quotas/billing** — quotas enforced at `PutBackup`; `UsageReport` aggregates
+  an app's namespaces into a statement (bytes, objects, quota headroom,
+  estimated cost) at `GET /v1/usage/{app}`.
+- **Self-signed CA** — `adapter-rcgen-ca` (`CertAuthority`): own Root CA,
+  issue/rotate/revoke leaf certs, self-hosted revocation list. `GET /v1/ca/root`
+  (pinned root), `POST /v1/admin/ca/leaf`.
+- **Self-hosted naming** — `adapter-ddns` (`NameResolver`): the dynamic→static
+  mechanism. `POST /v1/naming` (publish), `GET /v1/naming/{name}` (resolve).
+
+Drills: `crates/vault-app/tests/repair.rs` (repair + unrepairable-beyond-parity)
+plus each adapter's unit tests (tamper-evident chain, escalation, cert issuance,
+name re-resolution). A live coordinator run exercises the perimeter, CA, naming,
+and usage endpoints.
 
 ## P4 (optional) — direct P2P transport
 

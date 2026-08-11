@@ -7,10 +7,12 @@ use axum::extract::{Path, State};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use vault_app::RepairReport;
 use vault_domain::{BlobId, NamespaceId};
 use vault_ports::ShardRef;
 use vault_proto::{
-    DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RestoredBlob,
+    DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RepairRequest,
+    RestoredBlob,
 };
 
 pub async fn health() -> &'static str {
@@ -46,6 +48,19 @@ pub async fn peer_get_shard(
         .await
         .map_err(err)?;
     Ok(Bytes::from(bytes))
+}
+
+/// Maintenance plane: self-healing repair of one blob's shards on the anchor.
+pub async fn repair(
+    State(st): State<AppState>,
+    Json(req): Json<RepairRequest>,
+) -> Result<Json<RepairReport>, ApiError> {
+    let report = st
+        .repair
+        .execute(&req.namespace, &req.blob_id)
+        .await
+        .map_err(err)?;
+    Ok(Json(report))
 }
 
 pub async fn put_backup(

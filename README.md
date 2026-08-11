@@ -65,6 +65,9 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `adapter-erasure` | `ErasureCoder` — P0 passthrough (`k = 1`). |
 | `adapter-reed-solomon` | `ErasureCoder` — P1 Reed-Solomon, any `k` of `n`. |
 | `adapter-peer-http` | `ShardTransport` — P2 peer-mesh shard replication. |
+| `adapter-perimeter` | `IntrusionSink` + `ThreatResponder` — P3 active perimeter. |
+| `adapter-rcgen-ca` | `CertAuthority` — P3 self-signed CA. |
+| `adapter-ddns` | `NameResolver` — P3 self-hosted naming (dynamic→static). |
 | `vault-client` | Thin SDK apps link against (client-side encryption + sidecar calls). |
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
@@ -73,7 +76,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Status — P0 + P1 + P2 (anchor + erasure + peer mesh)
+## Status — P0–P3 (anchor + erasure + mesh + repair + perimeter + self-sovereignty)
 
 The workspace implements the **P0** slice: the Contract types, the pure domain
 core, the ports, the use-cases (`RegisterApp`, `IssueCapability`, `PutBackup`,
@@ -92,7 +95,15 @@ serve shards for each other, restores prefer nearby peers, and the RustFS anchor
 is always the authoritative fallback — so peers going offline never blocks a
 restore. Configure peers with `VAULT_PEERS`.
 
-**This alone is reliable, app-agnostic, off-site backup/restore.**
+**P3** adds the **self-healing repair loop** (`RepairShards` — rebuild
+missing/corrupt shards from survivors), the **active perimeter**
+(`adapter-perimeter` — a tamper-evident intrusion ledger + an escalating
+allow→tarpit→block responder wired as coordinator middleware),
+**quotas/billing** (`UsageReport` + `/v1/usage/{app}`), a **self-signed CA**
+(`adapter-rcgen-ca`), and **self-hosted naming** (`adapter-ddns`, the
+dynamic→static mechanism).
+
+**This is reliable, app-agnostic, off-site backup/restore.**
 
 ## Build & test
 

@@ -13,6 +13,8 @@ mod issue_capability;
 mod list_backups;
 mod put_backup;
 mod register_app;
+mod repair_shards;
+mod usage_report;
 
 pub use create_namespace::CreateNamespace;
 pub use delete_backup::DeleteBackup;
@@ -21,5 +23,7 @@ pub use issue_capability::{IssueCapability, MAX_TOKEN_TTL_SECS};
 pub use list_backups::ListBackups;
 pub use put_backup::PutBackup;
 pub use register_app::RegisterApp;
+pub use repair_shards::{RepairReport, RepairShards};
+pub use usage_report::{UsageReport, UsageStatement};
 
 pub use vault_ports::{PortError, PortResult};

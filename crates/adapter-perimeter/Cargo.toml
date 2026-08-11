@@ -1,6 +1,6 @@
 [package]
-name = "vault-app"
-description = "VaultMesh use-cases — orchestrate ports; depend on traits only (DIP)."
+name = "adapter-perimeter"
+description = "VaultMesh active perimeter (P3) — tamper-evident intrusion ledger + escalating threat responder."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,12 +12,8 @@ vault-domain = { workspace = true }
 vault-ports = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
-async-trait = { workspace = true }
-adapter-memstore = { workspace = true }
-adapter-blob-fs = { workspace = true }
-adapter-crypto = { workspace = true }
-adapter-reed-solomon = { workspace = true }
-tempfile = "3"

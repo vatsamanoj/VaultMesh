@@ -78,7 +78,10 @@ Every op (register, token issue, put, get, repair, revoke) is appended to a
 
 Modeled cleanly as a `ThreatResponder` port (classify → allow / tarpit / block)
 + an `IntrusionSink` port (append the footprint), so the policy is testable and
-swappable and the mesh-wide blocklist is one adapter. *(Declared for P3.)*
+swappable and the mesh-wide blocklist is one adapter. **Implemented in P3**
+(`adapter-perimeter`): a hash-chained, tamper-evident intrusion ledger and an
+escalating responder, wired as coordinator middleware that records a footprint
+for every rejected request and blocks repeat offenders by fingerprint.
 
 ## Prying eyes — confidentiality against passive observers
 

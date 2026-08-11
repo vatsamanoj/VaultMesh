@@ -54,6 +54,10 @@ impl MetadataStore for MemoryMetadataStore {
         Ok(self.inner.read().await.namespaces.get(id).cloned())
     }
 
+    async fn list_namespaces(&self) -> PortResult<Vec<NamespaceId>> {
+        Ok(self.inner.read().await.namespaces.keys().cloned().collect())
+    }
+
     async fn namespace_usage(&self, id: &NamespaceId) -> PortResult<NamespaceUsage> {
         let inner = self.inner.read().await;
         let mut usage = NamespaceUsage::default();

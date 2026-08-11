@@ -87,6 +87,10 @@ impl MetadataStore for RemoteMetadataStore {
         self.get(&format!("/v1/meta/namespaces/{id}")).await
     }
 
+    async fn list_namespaces(&self) -> PortResult<Vec<NamespaceId>> {
+        self.get("/v1/meta/namespaces").await
+    }
+
     async fn namespace_usage(&self, id: &NamespaceId) -> PortResult<NamespaceUsage> {
         self.get(&format!("/v1/meta/namespaces/{id}/usage")).await
     }

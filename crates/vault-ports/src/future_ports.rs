@@ -4,6 +4,7 @@
 use crate::error::PortResult;
 use crate::storage::ShardRef;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use vault_domain::{BlobId, NamespaceId};
 
 /// P2 — peer mesh shard transport. Replicate/serve shards between node-agents
@@ -43,7 +44,7 @@ pub trait CertAuthority: Send + Sync {
 }
 
 /// The escalating response to a caller. See `docs/SECURITY.md`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThreatDecision {
     Allow,
     Tarpit,
@@ -56,7 +57,7 @@ pub trait ThreatResponder: Send + Sync {
 }
 
 /// One footprint appended to the tamper-evident intrusion ledger.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntrusionRecord {
     pub source_ip: String,
     pub ja3: Option<String>,

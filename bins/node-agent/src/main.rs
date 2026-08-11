@@ -24,7 +24,7 @@ use remote_meta::RemoteMetadataStore;
 use state::AppState;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup};
+use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup, RepairShards};
 use vault_domain::PlacementPolicy;
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
@@ -44,6 +44,44 @@ async fn fetch_verifier(coordinator: &str) -> Result<Ed25519Verifier, Box<dyn st
     Ok(Ed25519Verifier::from_public_key(&bytes)?)
 }
 
+/// Periodically sweep every known blob and repair missing/corrupt shards on the
+/// anchor — the "repair when nodes go dark" loop.
+fn spawn_repair_sweep(
+    metadata: Arc<dyn MetadataStore>,
+    repair: Arc<RepairShards>,
+    interval_secs: u64,
+) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            ticker.tick().await;
+            let namespaces = match metadata.list_namespaces().await {
+                Ok(ns) => ns,
+                Err(e) => {
+                    tracing::warn!(error = %e, "repair sweep: list_namespaces failed");
+                    continue;
+                }
+            };
+            for ns in namespaces {
+                let blobs = metadata.list_blobs(&ns).await.unwrap_or_default();
+                for blob in blobs {
+                    match repair.execute(&ns, &blob).await {
+                        Ok(r) if r.repaired > 0 || r.unrepairable => {
+                            tracing::info!(
+                                namespace = %ns, blob = %blob,
+                                repaired = r.repaired, unrepairable = r.unrepairable,
+                                "repair sweep"
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(blob = %blob, error = %e, "repair failed"),
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(routes::health))
@@ -56,6 +94,8 @@ fn router(state: AppState) -> Router {
             "/v1/peer/shards/:ns/:blob/:index",
             put(routes::peer_put_shard).get(routes::peer_get_shard),
         )
+        // Maintenance plane: on-demand self-healing repair.
+        .route("/v1/maintenance/repair", post(routes::repair))
         .with_state(state)
 }
 
@@ -116,8 +156,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         clock.clone(),
     )
     .with_mesh(transport.clone());
+    let repair = RepairShards::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+    )
+    .with_mesh(transport.clone());
 
-    // Data-plane use-cases.
+    // Data-plane + maintenance use-cases.
     let state = AppState {
         put: Arc::new(put),
         get: Arc::new(get),
@@ -132,8 +179,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             verifier.clone(),
             clock.clone(),
         )),
+        repair: Arc::new(repair),
         anchor: anchor.clone(),
     };
+
+    // Optional background repair sweep (VAULT_REPAIR_SECS > 0 enables it).
+    if let Some(interval) = std::env::var("VAULT_REPAIR_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|s| *s > 0)
+    {
+        spawn_repair_sweep(metadata.clone(), state.repair.clone(), interval);
+    }
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, %coordinator, peers = peers.len(), "VaultMesh node-agent listening");
