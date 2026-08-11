@@ -98,10 +98,23 @@ plus each adapter's unit tests (tamper-evident chain, escalation, cert issuance,
 name re-resolution). A live coordinator run exercises the perimeter, CA, naming,
 and usage endpoints.
 
-## P4 (optional) — direct P2P transport
+## P4 (optional) — direct P2P transport  ← implemented
 
-QUIC hole-punching / libp2p to drop the coordinator relay, only if bandwidth
-savings justify it.
+Implemented here:
+- `adapter-quic` (`QuicShardTransport` + `QuicShardServer`): node-agents transfer
+  shards **directly over QUIC** (via `quinn`), dropping the coordinator-mediated
+  hop of the P2 HTTP mesh. Peer↔peer transfers are end-to-end encrypted (TLS 1.3,
+  forward secrecy) over VaultMesh's own self-signed, pinned trust — no public CA.
+- `DirectNatBroker` (`NatBroker`): attempts a direct connection ("punch"); the
+  coordinator relay remains the always-works fallback. No external STUN/TURN.
+- The node-agent selects the transport at runtime (`VAULT_TRANSPORT=quic`) and
+  starts a QUIC shard server (`VAULT_QUIC_ADDR`); the same use-cases drive it —
+  only the adapter behind `ShardTransport` changes.
+
+Drills (`crates/adapter-quic/tests/loopback.rs`): a real QUIC put→fetch round
+trip, missing-shard → `NotFound`, and a NAT punch that succeeds against a live
+peer and fails fast against a dead one. A live two-node run replicates all
+shards over QUIC with byte-identical restore.
 
 ---
 

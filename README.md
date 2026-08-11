@@ -68,6 +68,7 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `adapter-perimeter` | `IntrusionSink` + `ThreatResponder` — P3 active perimeter. |
 | `adapter-rcgen-ca` | `CertAuthority` — P3 self-signed CA. |
 | `adapter-ddns` | `NameResolver` — P3 self-hosted naming (dynamic→static). |
+| `adapter-quic` | `ShardTransport` + `NatBroker` — P4 direct QUIC P2P transport. |
 | `vault-client` | Thin SDK apps link against (client-side encryption + sidecar calls). |
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
@@ -76,7 +77,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Status — P0–P3 (anchor + erasure + mesh + repair + perimeter + self-sovereignty)
+## Status — P0–P4 (all phases: anchor · erasure · mesh · repair · perimeter · self-sovereignty · QUIC)
 
 The workspace implements the **P0** slice: the Contract types, the pure domain
 core, the ports, the use-cases (`RegisterApp`, `IssueCapability`, `PutBackup`,
@@ -102,6 +103,12 @@ allow→tarpit→block responder wired as coordinator middleware),
 **quotas/billing** (`UsageReport` + `/v1/usage/{app}`), a **self-signed CA**
 (`adapter-rcgen-ca`), and **self-hosted naming** (`adapter-ddns`, the
 dynamic→static mechanism).
+
+**P4** (optional) adds **direct QUIC peer-to-peer transport** (`adapter-quic`):
+node-agents move shards directly over QUIC — end-to-end encrypted on VaultMesh's
+own self-signed, pinned trust — dropping the coordinator-mediated hop, with a
+`NatBroker` that punches direct paths and falls back to the relay. Enable with
+`VAULT_TRANSPORT=quic`.
 
 **This is reliable, app-agnostic, off-site backup/restore.**
 

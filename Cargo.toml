@@ -14,6 +14,7 @@ members = [
     "crates/adapter-perimeter",
     "crates/adapter-rcgen-ca",
     "crates/adapter-ddns",
+    "crates/adapter-quic",
     "crates/vault-client",
     "bins/coordinator",
     "bins/node-agent",
@@ -55,6 +56,9 @@ sha2 = "0.10"
 rand = "0.8"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rcgen = "0.13"
+quinn = "0.11"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-pki-types = "1"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 
@@ -72,6 +76,7 @@ adapter-peer-http = { path = "crates/adapter-peer-http" }
 adapter-perimeter = { path = "crates/adapter-perimeter" }
 adapter-rcgen-ca = { path = "crates/adapter-rcgen-ca" }
 adapter-ddns = { path = "crates/adapter-ddns" }
+adapter-quic = { path = "crates/adapter-quic" }
 vault-client = { path = "crates/vault-client" }
 
 [profile.release]
