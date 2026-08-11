@@ -46,13 +46,14 @@ swappable **adapters**. Every file targets **≤500 lines**, enforced in CI.
 | `BlobAnchor` | Authoritative full-set object store | `adapter-blob-fs` | `adapter-rustfs` |
 | `MetadataStore` | Registry, namespaces, manifests | `adapter-memstore` | `adapter-postgres` |
 | `Cryptographer` | AES-256-GCM + HKDF (client side) | `adapter-crypto` | HSM-backed |
-| `ErasureCoder` | Shard / reconstruct | `adapter-erasure` (passthrough) | Reed-Solomon |
+| `ErasureCoder` | Shard / reconstruct | `adapter-reed-solomon` (P1, any k-of-n) · `adapter-erasure` (passthrough) | — |
 | `CapabilitySigner` / `AuthVerifier` | Sign/verify capability tokens | `adapter-crypto` (ed25519) | KMS/HSM signer |
 | `Clock` | Testable time (TTL, nonce expiry) | system clock | — |
-| `ShardTransport` | Peer mesh shard put/get | *(P2)* | `adapter-quic` |
-| `NameResolver` | stable name → current IP (dynamic→static) | *(P3)* | `adapter-ddns` |
-| `NatBroker` | hole-punch / coordinator relay | *(P2)* | `adapter-quic` |
-| `CertAuthority` | issue/rotate/revoke certs | *(P3)* | `adapter-rcgen-ca` |
+| `ShardTransport` | Peer mesh shard put/get | `adapter-peer-http` (P2) · `adapter-quic` (P4) | — |
+| `NameResolver` | stable name → current IP (dynamic→static) | `adapter-ddns` (P3) | — |
+| `NatBroker` | hole-punch / coordinator relay | `adapter-quic` (P4) | — |
+| `CertAuthority` | issue/rotate/revoke certs | `adapter-rcgen-ca` (P3) | — |
+| `IntrusionSink` / `ThreatResponder` | perimeter footprints + block policy | `adapter-perimeter` (P3) | — |
 
 Ports for later phases are declared now (ISP: narrow, role-specific traits) so
 the domain and use-cases are stable while adapters land phase by phase.

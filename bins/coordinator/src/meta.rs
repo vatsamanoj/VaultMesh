@@ -11,6 +11,13 @@ use axum::Json;
 use vault_domain::{AppContract, BlobId, Manifest, Namespace, NamespaceId};
 use vault_ports::NamespaceUsage;
 
+pub async fn list_namespaces(
+    State(st): State<AppState>,
+) -> Result<Json<Vec<NamespaceId>>, ApiError> {
+    let ids = st.metadata.list_namespaces().await.map_err(err)?;
+    Ok(Json(ids))
+}
+
 pub async fn get_contract(
     State(st): State<AppState>,
     Path(app): Path<String>,

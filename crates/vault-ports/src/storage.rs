@@ -58,6 +58,8 @@ pub trait MetadataStore: Send + Sync {
     async fn create_namespace(&self, ns: &Namespace) -> PortResult<()>;
     async fn get_namespace(&self, id: &NamespaceId) -> PortResult<Option<Namespace>>;
     async fn namespace_usage(&self, id: &NamespaceId) -> PortResult<NamespaceUsage>;
+    /// All namespace ids (used by the repair sweep and admin views).
+    async fn list_namespaces(&self) -> PortResult<Vec<NamespaceId>>;
 
     // --- manifests ---
     async fn put_manifest(&self, manifest: &Manifest) -> PortResult<()>;

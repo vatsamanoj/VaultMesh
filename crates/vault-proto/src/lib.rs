@@ -8,7 +8,7 @@ mod data;
 
 pub use control::{
     CoordinatorKey, CreateNamespaceRequest, CreateNamespaceResponse, IssueCapabilityRequest,
-    IssueCapabilityResponse, RegisterAppRequest, RegisterAppResponse,
+    IssueCapabilityResponse, RegisterAppRequest, RegisterAppResponse, RepairRequest,
 };
 pub use data::{
     DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RestoredBlob,

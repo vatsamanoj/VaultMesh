@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "demo-app",
             Quota::new(1 << 30, 10_000),
             RetentionPolicy::new(3, 30),
-            ErasureParams::passthrough(),
+            ErasureParams::recommended(), // P1: Reed-Solomon 4-of-6
         )
         .await?;
     println!("registered app: {}", app.app_id);

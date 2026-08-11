@@ -1,0 +1,23 @@
+[package]
+name = "adapter-quic"
+description = "VaultMesh direct P2P transport (P4) — QUIC ShardTransport + NatBroker over a self-signed, pinned overlay."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+rcgen = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+adapter-blob-fs = { workspace = true }
+tempfile = "3"

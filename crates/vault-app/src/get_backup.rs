@@ -2,10 +2,10 @@
 
 use crate::guard::authorize;
 use std::sync::Arc;
-use vault_domain::{BlobId, CapabilityToken, NamespaceId, Operation};
+use vault_domain::{BlobId, CapabilityToken, NamespaceId, Operation, Shard, ShardLocation};
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, MetadataStore, PortError,
-    PortResult, ShardRef,
+    PortResult, ShardRef, ShardTransport,
 };
 
 pub struct GetBackup {
@@ -15,6 +15,7 @@ pub struct GetBackup {
     crypto: Arc<dyn Cryptographer>,
     verifier: Arc<dyn AuthVerifier>,
     clock: Arc<dyn Clock>,
+    transport: Option<Arc<dyn ShardTransport>>,
 }
 
 impl GetBackup {
@@ -33,7 +34,15 @@ impl GetBackup {
             crypto,
             verifier,
             clock,
+            transport: None,
         }
+    }
+
+    /// Enable P2 peer-preferred reads: try a shard's peer replicas first, fall
+    /// back to the authoritative anchor.
+    pub fn with_mesh(mut self, transport: Arc<dyn ShardTransport>) -> Self {
+        self.transport = Some(transport);
+        self
     }
 
     /// Returns the byte-identical ciphertext originally stored. The caller
@@ -60,31 +69,26 @@ impl GetBackup {
             .await?
             .ok_or(PortError::NotFound)?;
 
-        // Fetch shards; a missing one becomes `None`. Verify integrity of each
-        // shard we do get before trusting it (per-shard SHA-256).
+        // For each shard: prefer a peer replica (locality/speed), fall back to
+        // the anchor. Verify SHA-256; a corrupted or absent shard becomes an
+        // erasure (`None`) so Reed-Solomon reconstructs around it, up to the
+        // parity budget. Restore fails only if fewer than `k` valid shards remain.
         let mut collected: Vec<Option<Vec<u8>>> = Vec::with_capacity(manifest.shards.len());
         let mut available = 0usize;
         for shard in &manifest.shards {
             let at = ShardRef::new(namespace.clone(), blob_id.clone(), shard.index);
-            match self.anchor.get_shard(&at).await {
-                Ok(bytes) => {
-                    if self.crypto.sha256_hex(&bytes) != shard.sha256 {
-                        return Err(PortError::Integrity(format!(
-                            "shard {} failed SHA-256 verification",
-                            shard.index
-                        )));
-                    }
+            match self.load_shard(&at, shard).await {
+                Some(bytes) => {
                     available += 1;
                     collected.push(Some(bytes));
                 }
-                Err(PortError::NotFound) => collected.push(None),
-                Err(other) => return Err(other),
+                None => collected.push(None),
             }
         }
 
         if !manifest.is_reconstructable(available) {
             return Err(PortError::Unavailable(format!(
-                "only {available} of {} shards available (need k={})",
+                "only {available} valid of {} shards (need k={})",
                 manifest.shards.len(),
                 manifest.erasure.k
             )));
@@ -95,5 +99,26 @@ impl GetBackup {
             manifest.erasure,
             manifest.ciphertext_len as usize,
         )
+    }
+
+    /// Load one shard, preferring peers, then the anchor. Returns the verified
+    /// bytes, or `None` if no source yields an integrity-valid copy.
+    async fn load_shard(&self, at: &ShardRef, shard: &Shard) -> Option<Vec<u8>> {
+        if let Some(transport) = &self.transport {
+            for location in &shard.locations {
+                if let ShardLocation::Peer(peer) = location {
+                    if let Ok(bytes) = transport.fetch_shard(peer, at).await {
+                        if self.crypto.sha256_hex(&bytes) == shard.sha256 {
+                            return Some(bytes);
+                        }
+                    }
+                }
+            }
+        }
+        // Authoritative fallback.
+        match self.anchor.get_shard(at).await {
+            Ok(bytes) if self.crypto.sha256_hex(&bytes) == shard.sha256 => Some(bytes),
+            _ => None,
+        }
     }
 }

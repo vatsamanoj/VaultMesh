@@ -62,25 +62,56 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `adapter-crypto` | `Cryptographer` — AES-256-GCM + HKDF. |
 | `adapter-blob-fs` | `BlobAnchor` — filesystem anchor (dev stand-in for RustFS). |
 | `adapter-memstore` | `MetadataStore` — in-memory (P0/dev). |
-| `adapter-erasure` | `ErasureCoder` — P0 passthrough (Reed-Solomon in P1). |
+| `adapter-erasure` | `ErasureCoder` — P0 passthrough (`k = 1`). |
+| `adapter-reed-solomon` | `ErasureCoder` — P1 Reed-Solomon, any `k` of `n`. |
+| `adapter-peer-http` | `ShardTransport` — P2 peer-mesh shard replication. |
+| `adapter-perimeter` | `IntrusionSink` + `ThreatResponder` — P3 active perimeter. |
+| `adapter-rcgen-ca` | `CertAuthority` — P3 self-signed CA. |
+| `adapter-ddns` | `NameResolver` — P3 self-hosted naming (dynamic→static). |
+| `adapter-quic` | `ShardTransport` + `NatBroker` — P4 direct QUIC P2P transport. |
 | `vault-client` | Thin SDK apps link against (client-side encryption + sidecar calls). |
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+See [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) for a live end-to-end run
+(`./scripts/demo.sh`), plus [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Status — P0 (Contract + central-anchor MVP)
+## Status — P0–P4 (all phases: anchor · erasure · mesh · repair · perimeter · self-sovereignty · QUIC)
 
-This scaffold implements the **P0** slice: the Contract types, the pure domain
-core, the ports, the P0 use-cases (`RegisterApp`, `IssueCapability`,
-`PutBackup`, `GetBackup`, `ListBackups`), real AES-256-GCM client-side
-encryption, a filesystem blob anchor, an in-memory metadata store, a
-capability-token signer/verifier (ed25519), and the `coordinator` + `node-agent`
-binaries wiring it together. No mesh and no erasure yet — those are P1/P2.
+The workspace implements the **P0** slice: the Contract types, the pure domain
+core, the ports, the use-cases (`RegisterApp`, `IssueCapability`, `PutBackup`,
+`GetBackup`, `ListBackups`), real AES-256-GCM client-side encryption, a
+filesystem blob anchor, an in-memory metadata store, a capability-token
+signer/verifier (ed25519), and the `coordinator` + `node-agent` binaries wiring
+it together.
 
-**This alone is reliable, app-agnostic, off-site backup/restore.**
+**P1** adds **Reed-Solomon erasure coding** (`adapter-reed-solomon`, default
+4-of-6) with per-shard SHA-256 verify-on-restore: any `k` of `n` shards
+reconstruct a blob, and a corrupted shard is treated as an erasure so restore
+survives it within the parity budget.
+
+**P2** adds the **peer mesh** (`adapter-peer-http`): node-agents replicate and
+serve shards for each other, restores prefer nearby peers, and the RustFS anchor
+is always the authoritative fallback — so peers going offline never blocks a
+restore. Configure peers with `VAULT_PEERS`.
+
+**P3** adds the **self-healing repair loop** (`RepairShards` — rebuild
+missing/corrupt shards from survivors), the **active perimeter**
+(`adapter-perimeter` — a tamper-evident intrusion ledger + an escalating
+allow→tarpit→block responder wired as coordinator middleware),
+**quotas/billing** (`UsageReport` + `/v1/usage/{app}`), a **self-signed CA**
+(`adapter-rcgen-ca`), and **self-hosted naming** (`adapter-ddns`, the
+dynamic→static mechanism).
+
+**P4** (optional) adds **direct QUIC peer-to-peer transport** (`adapter-quic`):
+node-agents move shards directly over QUIC — end-to-end encrypted on VaultMesh's
+own self-signed, pinned trust — dropping the coordinator-mediated hop, with a
+`NatBroker` that punches direct paths and falls back to the relay. Enable with
+`VAULT_TRANSPORT=quic`.
+
+**This is reliable, app-agnostic, off-site backup/restore.**
 
 ## Build & test
 

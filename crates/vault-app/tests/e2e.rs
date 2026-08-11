@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use adapter_blob_fs::FsBlobAnchor;
 use adapter_crypto::{AesGcmCryptographer, Ed25519Signer, RandomIdSource, SystemClock};
-use adapter_erasure::PassthroughCoder;
 use adapter_memstore::MemoryMetadataStore;
+use adapter_reed_solomon::ReedSolomonCoder;
 use tempfile::TempDir;
 use vault_app::{
     CreateNamespace, DeleteBackup, GetBackup, IssueCapability, ListBackups, PutBackup, RegisterApp,
@@ -42,7 +42,7 @@ fn ctx() -> Ctx {
 
     let metadata: Arc<dyn MetadataStore> = Arc::new(MemoryMetadataStore::new());
     let anchor: Arc<dyn BlobAnchor> = Arc::new(FsBlobAnchor::new(&root));
-    let erasure: Arc<dyn ErasureCoder> = Arc::new(PassthroughCoder::new());
+    let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
     let signer = Arc::new(Ed25519Signer::generate());
     let verifier: Arc<dyn AuthVerifier> = Arc::new(signer.verifier());
@@ -95,7 +95,7 @@ impl Ctx {
             .execute(
                 Quota::new(1 << 30, 1000),
                 RetentionPolicy::new(3, 30),
-                ErasureParams::passthrough(),
+                ErasureParams::recommended(), // Reed-Solomon 4-of-6
             )
             .await
             .unwrap();
@@ -260,25 +260,70 @@ async fn foreign_signature_is_rejected() {
     assert!(matches!(err, PortError::Crypto(_)));
 }
 
+impl Ctx {
+    fn shard_path(&self, ns: &NamespaceId, blob: &vault_domain::BlobId, index: u16) -> PathBuf {
+        self.root
+            .join(ns.as_str())
+            .join(blob.as_str())
+            .join(format!("{index:05}.shard"))
+    }
+}
+
+/// Reed-Solomon 4-of-6 tolerates up to 2 lost shards; kill exactly the parity
+/// budget and restore still succeeds from the anchor.
 #[tokio::test]
-async fn tampered_shard_is_detected_on_restore() {
+async fn losses_within_parity_are_survived() {
+    let c = ctx();
+    let (app, ns) = c.onboard().await;
+    let payload = b"reliability of restore is priority number one".to_vec();
+    let ct = c.seal(&ns, &payload);
+    let put_tok = c.token(&app, &ns, Operation::Put).await;
+    let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
+
+    // Delete 2 shards outright (simulate offline shard-holders).
+    std::fs::remove_file(c.shard_path(&ns, &blob, 1)).unwrap();
+    std::fs::remove_file(c.shard_path(&ns, &blob, 4)).unwrap();
+
+    let get_tok = c.token(&app, &ns, Operation::Get).await;
+    let restored_ct = c.get.execute(&ns, &get_tok, &blob).await.unwrap();
+    assert_eq!(c.open(&ns, &restored_ct), payload, "erasure reconstructs");
+}
+
+/// A *corrupted* shard is caught by SHA-256 and treated as an erasure, so RS
+/// reconstructs around it — corruption within the parity budget is survived.
+#[tokio::test]
+async fn corrupted_shard_is_reconstructed_around() {
+    let c = ctx();
+    let (app, ns) = c.onboard().await;
+    let payload = vec![0xABu8; 4096];
+    let ct = c.seal(&ns, &payload);
+    let put_tok = c.token(&app, &ns, Operation::Put).await;
+    let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
+
+    // Corrupt one shard (bit-flip) and delete another: 2 erasures, within budget.
+    std::fs::write(c.shard_path(&ns, &blob, 0), b"tampered").unwrap();
+    std::fs::remove_file(c.shard_path(&ns, &blob, 5)).unwrap();
+
+    let get_tok = c.token(&app, &ns, Operation::Get).await;
+    let restored_ct = c.get.execute(&ns, &get_tok, &blob).await.unwrap();
+    assert_eq!(c.open(&ns, &restored_ct), payload);
+}
+
+/// Losing more than the parity budget (3 of 6, k=4) fails cleanly.
+#[tokio::test]
+async fn losses_beyond_parity_fail() {
     let c = ctx();
     let (app, ns) = c.onboard().await;
     let ct = c.seal(&ns, b"important backup bytes");
     let put_tok = c.token(&app, &ns, Operation::Put).await;
     let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
 
-    // Corrupt the on-disk shard; per-shard SHA-256 must catch it.
-    let shard = c
-        .root
-        .join(ns.as_str())
-        .join(blob.as_str())
-        .join("00000.shard");
-    std::fs::write(&shard, b"corrupted-bytes-of-a-different-length").unwrap();
-
+    for i in [0u16, 2, 5] {
+        std::fs::remove_file(c.shard_path(&ns, &blob, i)).unwrap();
+    }
     let get_tok = c.token(&app, &ns, Operation::Get).await;
     let err = c.get.execute(&ns, &get_tok, &blob).await.unwrap_err();
-    assert!(matches!(err, PortError::Integrity(_)));
+    assert!(matches!(err, PortError::Unavailable(_)));
 }
 
 #[tokio::test]

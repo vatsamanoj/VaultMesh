@@ -18,6 +18,9 @@ vault-app = { workspace = true }
 vault-proto = { workspace = true }
 adapter-memstore = { workspace = true }
 adapter-crypto = { workspace = true }
+adapter-perimeter = { workspace = true }
+adapter-rcgen-ca = { workspace = true }
+adapter-ddns = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }

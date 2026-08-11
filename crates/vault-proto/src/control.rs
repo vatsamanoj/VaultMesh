@@ -57,3 +57,10 @@ pub struct IssueCapabilityResponse {
 pub struct CoordinatorKey {
     pub public_key_b64: String,
 }
+
+/// Trigger a self-healing repair pass over one blob (maintenance plane).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepairRequest {
+    pub namespace: NamespaceId,
+    pub blob_id: vault_domain::BlobId,
+}

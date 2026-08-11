@@ -6,6 +6,11 @@
 //! - `VAULT_NODE_ADDR`        bind address (default `127.0.0.1:8790`)
 //! - `VAULT_COORDINATOR_URL`  control plane (default `http://127.0.0.1:8787`)
 //! - `VAULT_ANCHOR_ROOT`      local shard directory (default `./.vaultmesh/anchor`)
+//! - `VAULT_PEERS`            comma-separated peer addresses for the mesh. HTTP
+//!   base URLs (`http://host:8790`) by default, or `host:port` when QUIC.
+//! - `VAULT_TRANSPORT`        `http` (default, P2) or `quic` (P4 direct P2P).
+//! - `VAULT_QUIC_ADDR`        QUIC shard-server bind address (default `0.0.0.0:8791`).
+//! - `VAULT_REPAIR_SECS`      background repair-sweep interval (0 disables).
 
 mod http;
 mod remote_meta;
@@ -14,29 +19,83 @@ mod state;
 
 use adapter_blob_fs::FsBlobAnchor;
 use adapter_crypto::{AesGcmCryptographer, Ed25519Verifier, RandomIdSource, SystemClock};
-use adapter_erasure::PassthroughCoder;
-use axum::routing::{get, post};
+use adapter_peer_http::PeerHttpTransport;
+use adapter_quic::{QuicShardServer, QuicShardTransport};
+use adapter_reed_solomon::ReedSolomonCoder;
+use axum::routing::{get, post, put};
 use axum::Router;
 use remote_meta::RemoteMetadataStore;
 use state::AppState;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup};
+use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup, RepairShards};
+use vault_domain::PlacementPolicy;
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
+    ShardTransport,
 };
 use vault_proto::CoordinatorKey;
 
 /// Fetch the coordinator's capability-verification key so the node-agent can
-/// verify tokens (L2). Retries briefly so startup ordering is forgiving.
+/// verify tokens (L2). Retries with backoff so startup ordering is forgiving.
 async fn fetch_verifier(coordinator: &str) -> Result<Ed25519Verifier, Box<dyn std::error::Error>> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
 
     let url = format!("{coordinator}/v1/coordinator/pubkey");
-    let key: CoordinatorKey = reqwest::get(&url).await?.error_for_status()?.json().await?;
-    let bytes = STANDARD.decode(key.public_key_b64)?;
-    Ok(Ed25519Verifier::from_public_key(&bytes)?)
+    let mut last_err: Option<Box<dyn std::error::Error>> = None;
+    for attempt in 0..10 {
+        match reqwest::get(&url).await.and_then(|r| r.error_for_status()) {
+            Ok(resp) => {
+                let key: CoordinatorKey = resp.json().await?;
+                let bytes = STANDARD.decode(key.public_key_b64)?;
+                return Ok(Ed25519Verifier::from_public_key(&bytes)?);
+            }
+            Err(e) => {
+                last_err = Some(Box::new(e));
+                tokio::time::sleep(std::time::Duration::from_millis(300 * (attempt + 1))).await;
+            }
+        }
+    }
+    Err(last_err.expect("at least one attempt failed"))
+}
+
+/// Periodically sweep every known blob and repair missing/corrupt shards on the
+/// anchor — the "repair when nodes go dark" loop.
+fn spawn_repair_sweep(
+    metadata: Arc<dyn MetadataStore>,
+    repair: Arc<RepairShards>,
+    interval_secs: u64,
+) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            ticker.tick().await;
+            let namespaces = match metadata.list_namespaces().await {
+                Ok(ns) => ns,
+                Err(e) => {
+                    tracing::warn!(error = %e, "repair sweep: list_namespaces failed");
+                    continue;
+                }
+            };
+            for ns in namespaces {
+                let blobs = metadata.list_blobs(&ns).await.unwrap_or_default();
+                for blob in blobs {
+                    match repair.execute(&ns, &blob).await {
+                        Ok(r) if r.repaired > 0 || r.unrepairable => {
+                            tracing::info!(
+                                namespace = %ns, blob = %blob,
+                                repaired = r.repaired, unrepairable = r.unrepairable,
+                                "repair sweep"
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(blob = %blob, error = %e, "repair failed"),
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn router(state: AppState) -> Router {
@@ -46,6 +105,13 @@ fn router(state: AppState) -> Router {
         .route("/v1/backups/get", post(routes::get_backup))
         .route("/v1/backups/list", post(routes::list_backups))
         .route("/v1/backups/delete", post(routes::delete_backup))
+        // P2 peer-mesh shard replicas (private overlay).
+        .route(
+            "/v1/peer/shards/:ns/:blob/:index",
+            put(routes::peer_put_shard).get(routes::peer_get_shard),
+        )
+        // Maintenance plane: on-demand self-healing repair.
+        .route("/v1/maintenance/repair", post(routes::repair))
         .with_state(state)
 }
 
@@ -64,35 +130,74 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("VAULT_COORDINATOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8787".into());
     let anchor_root =
         std::env::var("VAULT_ANCHOR_ROOT").unwrap_or_else(|_| "./.vaultmesh/anchor".into());
+    let peers: Vec<String> = std::env::var("VAULT_PEERS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
     // Adapters behind their ports.
     let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(coordinator.clone()));
     let anchor: Arc<dyn BlobAnchor> = Arc::new(FsBlobAnchor::new(anchor_root));
-    let erasure: Arc<dyn ErasureCoder> = Arc::new(PassthroughCoder::new());
+    let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
     let verifier: Arc<dyn AuthVerifier> = Arc::new(fetch_verifier(&coordinator).await?);
     let ids: Arc<dyn IdSource> = Arc::new(RandomIdSource::new());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
 
-    // Data-plane use-cases.
+    // Peer transport: HTTP (P2, default) or direct QUIC (P4). With QUIC, also
+    // start a QUIC shard server so peers can fetch/put directly.
+    let transport: Arc<dyn ShardTransport> =
+        if std::env::var("VAULT_TRANSPORT").as_deref() == Ok("quic") {
+            let quic_addr = std::env::var("VAULT_QUIC_ADDR")
+                .unwrap_or_else(|_| "0.0.0.0:8791".into())
+                .parse()?;
+            let server = QuicShardServer::bind(anchor.clone(), quic_addr)?;
+            tracing::info!(addr = %server.local_addr()?, "VaultMesh QUIC shard server listening");
+            tokio::spawn(server.run());
+            Arc::new(QuicShardTransport::new()?)
+        } else {
+            Arc::new(PeerHttpTransport::new())
+        };
+
+    // Peers are accelerators only; the anchor always holds the full shard set.
+    let placement = PlacementPolicy {
+        locality_hint: None,
+        prefer_peers: !peers.is_empty(),
+    };
+
+    let put = PutBackup::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+        verifier.clone(),
+        ids.clone(),
+        clock.clone(),
+    )
+    .with_mesh(transport.clone(), peers.clone(), placement);
+    let get = GetBackup::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+        verifier.clone(),
+        clock.clone(),
+    )
+    .with_mesh(transport.clone());
+    let repair = RepairShards::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+    )
+    .with_mesh(transport.clone());
+
+    // Data-plane + maintenance use-cases.
     let state = AppState {
-        put: Arc::new(PutBackup::new(
-            metadata.clone(),
-            anchor.clone(),
-            erasure.clone(),
-            crypto.clone(),
-            verifier.clone(),
-            ids.clone(),
-            clock.clone(),
-        )),
-        get: Arc::new(GetBackup::new(
-            metadata.clone(),
-            anchor.clone(),
-            erasure.clone(),
-            crypto.clone(),
-            verifier.clone(),
-            clock.clone(),
-        )),
+        put: Arc::new(put),
+        get: Arc::new(get),
         list: Arc::new(ListBackups::new(
             metadata.clone(),
             verifier.clone(),
@@ -104,10 +209,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             verifier.clone(),
             clock.clone(),
         )),
+        repair: Arc::new(repair),
+        anchor: anchor.clone(),
     };
 
+    // Optional background repair sweep (VAULT_REPAIR_SECS > 0 enables it).
+    if let Some(interval) = std::env::var("VAULT_REPAIR_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|s| *s > 0)
+    {
+        spawn_repair_sweep(metadata.clone(), state.repair.clone(), interval);
+    }
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!(%addr, %coordinator, "VaultMesh node-agent listening");
+    tracing::info!(%addr, %coordinator, peers = peers.len(), "VaultMesh node-agent listening");
     axum::serve(listener, router(state)).await?;
     Ok(())
 }

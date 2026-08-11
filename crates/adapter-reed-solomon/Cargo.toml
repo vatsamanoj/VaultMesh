@@ -1,0 +1,13 @@
+[package]
+name = "adapter-reed-solomon"
+description = "VaultMesh Reed-Solomon erasure adapter (P1) — any k of n shards reconstruct the blob."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+reed-solomon-erasure = { workspace = true }

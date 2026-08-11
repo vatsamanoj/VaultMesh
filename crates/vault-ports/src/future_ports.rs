@@ -2,15 +2,20 @@
 //! while adapters land phase by phase. No P0 adapter implements these yet.
 
 use crate::error::PortResult;
+use crate::storage::ShardRef;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use vault_domain::{BlobId, NamespaceId};
 
-/// P2 — peer mesh shard transport. Move shards between node-agents for
-/// speed/locality; the anchor is always the fallback.
+/// P2 — peer mesh shard transport. Replicate/serve shards between node-agents
+/// for speed and locality; the RustFS anchor is always the authoritative
+/// fallback, so a peer transport is a pure accelerator.
 #[async_trait]
 pub trait ShardTransport: Send + Sync {
-    async fn send_shard(&self, peer: &str, key: &str, bytes: &[u8]) -> PortResult<()>;
-    async fn fetch_shard(&self, peer: &str, key: &str) -> PortResult<Vec<u8>>;
+    /// Best-effort push of a shard replica to `peer` (a dialable peer address).
+    async fn send_shard(&self, peer: &str, at: &ShardRef, bytes: &[u8]) -> PortResult<()>;
+    /// Fetch a shard replica from `peer`; `PortError::NotFound` if absent.
+    async fn fetch_shard(&self, peer: &str, at: &ShardRef) -> PortResult<Vec<u8>>;
 }
 
 /// P3 — self-hosted naming: stable VaultMesh name -> current IP (the
@@ -39,7 +44,7 @@ pub trait CertAuthority: Send + Sync {
 }
 
 /// The escalating response to a caller. See `docs/SECURITY.md`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThreatDecision {
     Allow,
     Tarpit,
@@ -52,7 +57,7 @@ pub trait ThreatResponder: Send + Sync {
 }
 
 /// One footprint appended to the tamper-evident intrusion ledger.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntrusionRecord {
     pub source_ip: String,
     pub ja3: Option<String>,

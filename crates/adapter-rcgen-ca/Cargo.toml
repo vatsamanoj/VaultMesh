@@ -1,0 +1,17 @@
+[package]
+name = "adapter-rcgen-ca"
+description = "VaultMesh self-signed CA (P3) — own Root CA, issue/rotate/revoke leaf certs. No public CA."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+rcgen = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
