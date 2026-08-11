@@ -118,6 +118,65 @@ shards over QUIC with byte-identical restore.
 
 ---
 
+## Future consideration — high shard counts (Leopard / FFT Reed-Solomon)
+
+**Not planned; documented so the future decision is informed.**
+
+Our `adapter-reed-solomon` uses a classic **GF(2⁸)** coder
+(`reed-solomon-erasure`), which is the right, simple choice for backup — but it
+carries a hard mathematical ceiling: Reed-Solomon in GF(2⁸) has only 256 field
+elements, so
+
+```
+data shards + parity shards ≤ 256
+```
+
+This is a non-issue for VaultMesh today: the default policy is **4-of-6** and
+realistic policies are single/low-double digits — nowhere near the cap.
+
+### When it would matter
+
+Only under **extreme fan-out** — splitting a *large* object across *hundreds* of
+independent nodes for maximum durability per byte stored. Two things change at
+that scale:
+
+- **The 256 ceiling** blocks `k + parity > 256` in GF(2⁸). Exceeding it requires
+  a larger field, **GF(2¹⁶)** (up to 65,536 shards).
+- **Speed.** Textbook Reed-Solomon is **O(n²)** (each parity shard combines all
+  data shards); at hundreds/thousands of shards that is too slow. The
+  **Leopard** algorithm computes RS with an FFT over the finite field, dropping
+  encode/decode to **O(n log n)** while staying MDS (any `k` of `n`
+  reconstruct). This is exactly what libraries like `klauspost/reedsolomon` do:
+  classic GF(2⁸) for ≤256 shards, a Leopard GF(2¹⁶) engine above it.
+
+### Why high shard counts are attractive (the payoff)
+
+- **More durability at the *same* storage overhead.** Fix the parity/data ratio
+  and raise `n`: `4-of-6` (33% overhead) survives 2 losses; `40-of-60` (same 33%)
+  survives 20. Losses must cluster far more improbably to exceed the budget.
+- **More independent failure domains** — a correlated outage takes out a smaller
+  *fraction* of the shards.
+- **Smaller shards** — more parallel transfer across peers and cheaper,
+  finer-grained repair.
+
+### Trade-offs (why it is not the default)
+
+- Larger manifests (every shard's hash + location) and more placement
+  coordination.
+- No benefit for **small** objects — shards shrink until per-shard overhead
+  (hashes, headers, round-trips) dominates. High shard counts pay off for large
+  objects across many nodes only.
+- FFT coders often want structured counts (padding toward powers of two).
+
+### Upgrade path
+
+Drop-in: implement a Leopard/FFT-based `ErasureCoder` (e.g. a GF(2¹⁶) coder)
+and select it when `contract.erasure.n > 256`, keeping the GF(2⁸) coder for the
+common small-`n` case. Because it sits behind the `ErasureCoder` port, **the
+use-cases do not change** — same swap the rest of the system already relies on.
+
+---
+
 ## Verification drills (targets)
 
 - **App-agnostic proof:** a throwaway non-LedgerFlow client registers, gets a

@@ -15,6 +15,16 @@ origin; node B is a peer, connected over QUIC), runs a narrated walkthrough
 (`scripts/demo.py`), then runs the real client-side-encryption roundtrip
 example. Everything is torn down on exit. Requires `python3` and `curl`.
 
+On **Windows** (PowerShell), run the equivalent:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+```
+
+Requires the Rust toolchain, `python` on `PATH`, and `curl.exe` (bundled with
+Windows 10+). Prebuilt Windows binaries are also published on the
+`windows-binaries` branch under `dist/windows-x86_64/`.
+
 ## The shape
 
 An app talks **localhost** to a small Rust sidecar with a short-lived capability
