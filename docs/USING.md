@@ -366,6 +366,12 @@ AES-256-GCM. Trade-off: every user installs the Nebula client and holds a
 Nebula host cert **in addition to** the VaultMesh client cert — trivial for your
 own fleet, heavier onboarding for arbitrary public customers.
 
+**Helper scripts:** `scripts/nebula-overlay/` automates all of the above —
+`setup-ca.sh` (own CA + lighthouse), `run-lighthouse.sh`, `run-anchor.sh`
+(MinIO/S3 on the overlay), `run-backend.sh` (coordinator bound to the overlay),
+and `enroll-user.sh <name> <overlay-ip>` (signs a host cert and builds a
+ready-to-hand-off bundle). See `scripts/nebula-overlay/README.md`.
+
 ## Remaining hardening (this reference build)
 
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.

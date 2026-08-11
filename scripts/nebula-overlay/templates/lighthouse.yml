@@ -1,0 +1,50 @@
+# VaultMesh Nebula lighthouse config (generated — edit templates/, not pki/).
+# Runs on your public-IP machine. Forward UDP __NEBULA_PORT__ to this host.
+pki:
+  ca: __CA_PATH__
+  cert: __CERT_PATH__
+  key: __KEY_PATH__
+
+# The lighthouse has no upstream to discover.
+static_host_map: {}
+
+lighthouse:
+  am_lighthouse: true
+  serve_dns: false
+
+listen:
+  host: 0.0.0.0
+  port: __NEBULA_PORT__
+
+punchy:
+  punch: true
+
+tun:
+  disabled: false
+  dev: nebula1
+
+logging:
+  level: info
+  format: text
+
+firewall:
+  conntrack:
+    tcp_timeout: 12m
+    udp_timeout: 3m
+    default_timeout: 10m
+  outbound:
+    - port: any
+      proto: any
+      host: any
+  inbound:
+    # Overlay peers may reach the VaultMesh coordinator + object store only.
+    - port: 8787
+      proto: tcp
+      host: any
+    - port: 9000
+      proto: tcp
+      host: any
+    # ICMP for reachability checks (nebula ping).
+    - port: any
+      proto: icmp
+      host: any

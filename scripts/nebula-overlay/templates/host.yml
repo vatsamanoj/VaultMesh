@@ -1,0 +1,48 @@
+# VaultMesh Nebula host config (generated per remote user).
+# Ships in the handoff bundle next to ca.crt + <name>.crt + <name>.key.
+pki:
+  ca: __CA_PATH__
+  cert: __CERT_PATH__
+  key: __KEY_PATH__
+
+# Where the lighthouse actually lives on the public internet.
+static_host_map:
+  "__LH_IP__": ["__PUBLIC_ENDPOINT__"]
+
+lighthouse:
+  am_lighthouse: false
+  interval: 60
+  hosts:
+    - "__LH_IP__"
+
+listen:
+  host: 0.0.0.0
+  port: 0            # ephemeral; hole-punched outbound, no inbound port needed
+
+punchy:
+  punch: true
+  respond: true
+
+tun:
+  disabled: false
+  dev: nebula1
+
+logging:
+  level: info
+  format: text
+
+firewall:
+  conntrack:
+    tcp_timeout: 12m
+    udp_timeout: 3m
+    default_timeout: 10m
+  outbound:
+    - port: any
+      proto: any
+      host: any
+  inbound:
+    # The node-agent data plane stays on 127.0.0.1; nothing inbound from the
+    # overlay is required except ICMP for reachability checks.
+    - port: any
+      proto: icmp
+      host: any
