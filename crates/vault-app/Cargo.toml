@@ -17,5 +17,5 @@ tokio = { workspace = true }
 adapter-memstore = { workspace = true }
 adapter-blob-fs = { workspace = true }
 adapter-crypto = { workspace = true }
-adapter-erasure = { workspace = true }
+adapter-reed-solomon = { workspace = true }
 tempfile = "3"

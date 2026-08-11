@@ -46,7 +46,7 @@ swappable **adapters**. Every file targets **≤500 lines**, enforced in CI.
 | `BlobAnchor` | Authoritative full-set object store | `adapter-blob-fs` | `adapter-rustfs` |
 | `MetadataStore` | Registry, namespaces, manifests | `adapter-memstore` | `adapter-postgres` |
 | `Cryptographer` | AES-256-GCM + HKDF (client side) | `adapter-crypto` | HSM-backed |
-| `ErasureCoder` | Shard / reconstruct | `adapter-erasure` (passthrough) | Reed-Solomon |
+| `ErasureCoder` | Shard / reconstruct | `adapter-reed-solomon` (P1, any k-of-n) · `adapter-erasure` (passthrough) | — |
 | `CapabilitySigner` / `AuthVerifier` | Sign/verify capability tokens | `adapter-crypto` (ed25519) | KMS/HSM signer |
 | `Clock` | Testable time (TTL, nonce expiry) | system clock | — |
 | `ShardTransport` | Peer mesh shard put/get | *(P2)* | `adapter-quic` |

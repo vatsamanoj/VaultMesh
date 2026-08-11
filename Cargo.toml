@@ -9,6 +9,7 @@ members = [
     "crates/adapter-blob-fs",
     "crates/adapter-memstore",
     "crates/adapter-erasure",
+    "crates/adapter-reed-solomon",
     "crates/vault-client",
     "bins/coordinator",
     "bins/node-agent",
@@ -44,6 +45,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # crypto adapters
 aes-gcm = "0.10"
+reed-solomon-erasure = "6"
 hkdf = "0.12"
 sha2 = "0.10"
 rand = "0.8"
@@ -60,6 +62,7 @@ adapter-crypto = { path = "crates/adapter-crypto" }
 adapter-blob-fs = { path = "crates/adapter-blob-fs" }
 adapter-memstore = { path = "crates/adapter-memstore" }
 adapter-erasure = { path = "crates/adapter-erasure" }
+adapter-reed-solomon = { path = "crates/adapter-reed-solomon" }
 vault-client = { path = "crates/vault-client" }
 
 [profile.release]

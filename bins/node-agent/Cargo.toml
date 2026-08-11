@@ -17,7 +17,7 @@ vault-ports = { workspace = true }
 vault-app = { workspace = true }
 vault-proto = { workspace = true }
 adapter-blob-fs = { workspace = true }
-adapter-erasure = { workspace = true }
+adapter-reed-solomon = { workspace = true }
 adapter-crypto = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }

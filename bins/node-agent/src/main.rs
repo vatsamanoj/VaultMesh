@@ -14,7 +14,7 @@ mod state;
 
 use adapter_blob_fs::FsBlobAnchor;
 use adapter_crypto::{AesGcmCryptographer, Ed25519Verifier, RandomIdSource, SystemClock};
-use adapter_erasure::PassthroughCoder;
+use adapter_reed_solomon::ReedSolomonCoder;
 use axum::routing::{get, post};
 use axum::Router;
 use remote_meta::RemoteMetadataStore;
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Adapters behind their ports.
     let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(coordinator.clone()));
     let anchor: Arc<dyn BlobAnchor> = Arc::new(FsBlobAnchor::new(anchor_root));
-    let erasure: Arc<dyn ErasureCoder> = Arc::new(PassthroughCoder::new());
+    let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
     let verifier: Arc<dyn AuthVerifier> = Arc::new(fetch_verifier(&coordinator).await?);
     let ids: Arc<dyn IdSource> = Arc::new(RandomIdSource::new());

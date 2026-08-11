@@ -24,11 +24,27 @@ Implemented here:
 - `coordinator` + `node-agent` axum binaries,
 - integration tests + CI file-size gate.
 
-## P1 — Erasure coding + integrity
+## P1 — Erasure coding + integrity  ← implemented
 
 Reed-Solomon shard onto the anchor; per-shard SHA-256 verify-on-restore. Proves
-the shard/reassemble pipeline centrally. Swap `adapter-erasure` for a
-Reed-Solomon adapter behind the same `ErasureCoder` port.
+the shard/reassemble pipeline centrally.
+
+Implemented here:
+- `adapter-reed-solomon` (`ReedSolomonCoder`) — splits a blob into `k` data +
+  `n − k` parity shards; **any `k` of `n`** reconstruct it. Fixed-size,
+  zero-padded shards (uniform sizes leak nothing). Drops in behind the same
+  `ErasureCoder` port — `node-agent` now defaults to Reed-Solomon 4-of-6
+  (`ErasureParams::recommended()`); the P0 `adapter-erasure` passthrough remains
+  for `k = 1`.
+- Verify-on-restore treats a **corrupted** shard (SHA-256 mismatch) as an
+  *erasure*, so Reed-Solomon reconstructs around it just like a lost shard, up
+  to the `n − k` parity budget. Restore fails cleanly only when fewer than `k`
+  valid shards remain.
+
+Durability drills (in `crates/vault-app/tests/e2e.rs`): losing the full parity
+budget still restores byte-identical; a corrupted-plus-missing pair within
+budget is reconstructed; losing more than the parity budget fails with
+`Unavailable`.
 
 ## P2 — Peer mesh acceleration + locality
 

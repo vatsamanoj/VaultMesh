@@ -66,6 +66,12 @@ impl ErasureParams {
     pub fn passthrough() -> Self {
         Self { k: 1, n: 1 }
     }
+
+    /// A sensible P1 Reed-Solomon default: 4 data + 2 parity (tolerates any 2
+    /// shard losses; restore needs any 4 of 6).
+    pub fn recommended() -> Self {
+        Self { k: 4, n: 6 }
+    }
 }
 
 /// Per-namespace storage limits.

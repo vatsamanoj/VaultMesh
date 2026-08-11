@@ -62,7 +62,8 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `adapter-crypto` | `Cryptographer` — AES-256-GCM + HKDF. |
 | `adapter-blob-fs` | `BlobAnchor` — filesystem anchor (dev stand-in for RustFS). |
 | `adapter-memstore` | `MetadataStore` — in-memory (P0/dev). |
-| `adapter-erasure` | `ErasureCoder` — P0 passthrough (Reed-Solomon in P1). |
+| `adapter-erasure` | `ErasureCoder` — P0 passthrough (`k = 1`). |
+| `adapter-reed-solomon` | `ErasureCoder` — P1 Reed-Solomon, any `k` of `n`. |
 | `vault-client` | Thin SDK apps link against (client-side encryption + sidecar calls). |
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
@@ -71,14 +72,19 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Status — P0 (Contract + central-anchor MVP)
+## Status — P0 + P1 (central anchor + erasure coding)
 
-This scaffold implements the **P0** slice: the Contract types, the pure domain
-core, the ports, the P0 use-cases (`RegisterApp`, `IssueCapability`,
-`PutBackup`, `GetBackup`, `ListBackups`), real AES-256-GCM client-side
-encryption, a filesystem blob anchor, an in-memory metadata store, a
-capability-token signer/verifier (ed25519), and the `coordinator` + `node-agent`
-binaries wiring it together. No mesh and no erasure yet — those are P1/P2.
+The workspace implements the **P0** slice: the Contract types, the pure domain
+core, the ports, the use-cases (`RegisterApp`, `IssueCapability`, `PutBackup`,
+`GetBackup`, `ListBackups`), real AES-256-GCM client-side encryption, a
+filesystem blob anchor, an in-memory metadata store, a capability-token
+signer/verifier (ed25519), and the `coordinator` + `node-agent` binaries wiring
+it together.
+
+**P1** adds **Reed-Solomon erasure coding** (`adapter-reed-solomon`, default
+4-of-6) with per-shard SHA-256 verify-on-restore: any `k` of `n` shards
+reconstruct a blob, and a corrupted shard is treated as an erasure so restore
+survives it within the parity budget. No peer mesh yet — that is P2.
 
 **This alone is reliable, app-agnostic, off-site backup/restore.**
 
