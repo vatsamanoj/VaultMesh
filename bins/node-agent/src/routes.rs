@@ -7,12 +7,12 @@ use axum::extract::{Path, State};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use vault_app::RepairReport;
+use vault_app::{PruneReport, RepairReport};
 use vault_domain::{BlobId, NamespaceId};
 use vault_ports::ShardRef;
 use vault_proto::{
-    DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RepairRequest,
-    RestoredBlob,
+    DeleteRequest, GetRequest, ListRequest, ListResponse, PruneRequest, PutRequest, PutResponse,
+    RepairRequest, RestoredBlob,
 };
 
 pub async fn health() -> &'static str {
@@ -58,6 +58,19 @@ pub async fn repair(
     let report = st
         .repair
         .execute(&req.namespace, &req.blob_id)
+        .await
+        .map_err(err)?;
+    Ok(Json(report))
+}
+
+/// Maintenance plane: prune old versions of one opaque object group.
+pub async fn prune(
+    State(st): State<AppState>,
+    Json(req): Json<PruneRequest>,
+) -> Result<Json<PruneReport>, ApiError> {
+    let report = st
+        .prune
+        .execute(&req.namespace, &req.object_id)
         .await
         .map_err(err)?;
     Ok(Json(report))

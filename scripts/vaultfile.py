@@ -31,6 +31,7 @@ Environment:
 """
 import base64
 import hashlib
+import hmac
 import json
 import os
 import ssl
@@ -150,13 +151,30 @@ def dec_name(pw, b64):
     return unpad_name(decrypt(pw, base64.b64decode(b64)))
 
 
-def publish_name(cfg, blob_id, name):
-    """Attach the encrypted filename to the manifest (the shared name index)."""
+def object_id(pw, namespace, name):
+    """Opaque, stable version-group id for a file: HMAC(index_key, name), where
+    index_key = PBKDF2(passphrase, salt=namespace). Same across versions of the
+    same file, bound to the vault, and reveals nothing about the name."""
+    idx = hashlib.pbkdf2_hmac("sha256", pw.encode(), namespace.encode(), KDF_ITERS, dklen=32)
+    return hmac.new(idx, name.encode(), hashlib.sha256).hexdigest()
+
+
+def publish_name(cfg, blob_id, name, oid):
+    """Attach the encrypted filename + opaque object id to the manifest."""
     try:
         _post(f"{COORD}/v1/meta/namespaces/{cfg['namespace']}/manifests/{blob_id}/name",
-              {"name_enc": enc_name(pw_of(), name)})
+              {"name_enc": enc_name(pw_of(), name), "object_id": oid})
     except SystemExit:
         pass
+
+
+def prune_versions(cfg, oid):
+    """Prune old versions of this file beyond keep_versions (honors min_days)."""
+    try:
+        return _post(f"{SIDECAR}/v1/maintenance/prune",
+                     {"namespace": cfg["namespace"], "object_id": oid})
+    except SystemExit:
+        return None
 
 
 def token(cfg, op):
@@ -166,9 +184,11 @@ def token(cfg, op):
 
 
 def cmd_init():
+    keep = int(os.environ.get("VAULT_KEEP_VERSIONS", "3"))
+    min_days = int(os.environ.get("VAULT_MIN_DAYS", "30"))
     app = _post(f"{COORD}/v1/apps", {
         "label": "vaultfile", "quota": {"max_bytes": 10 * 1024**3, "max_objects": 100000},
-        "retention": {"keep_versions": 3, "min_days": 30}, "erasure": {"k": 4, "n": 6}})
+        "retention": {"keep_versions": keep, "min_days": min_days}, "erasure": {"k": 4, "n": 6}})
     ns = _post(f"{COORD}/v1/namespaces", {"app_id": app["app_id"]})
     cfg = {
         "coordinator": COORD, "sidecar": SIDECAR,
@@ -193,8 +213,13 @@ def cmd_backup(path, name=None):
         "ciphertext_b64": base64.b64encode(blob).decode()})
     cfg["catalog"][name] = {"blob_id": r["blob_id"], "size": len(plaintext)}
     save_cfg(cfg)
-    publish_name(cfg, r["blob_id"], name)  # share the (encrypted) name with other clients
-    print(f"backed up '{name}' ({len(plaintext)} bytes) -> {r['blob_id']}")
+    oid = object_id(pw_of(), cfg["namespace"], name)
+    publish_name(cfg, r["blob_id"], name, oid)  # share encrypted name + version group
+    rep = prune_versions(cfg, oid)  # enforce keep_versions for this file
+    msg = f"backed up '{name}' ({len(plaintext)} bytes) -> {r['blob_id']}"
+    if rep and rep.get("pruned"):
+        msg += f"  (pruned {rep['pruned']} old version(s))"
+    print(msg)
 
 
 def cmd_list():

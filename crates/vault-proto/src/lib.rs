@@ -10,7 +10,7 @@ mod data;
 pub use anchor::{DeleteBlobRequest, PresignOp, PresignRequest, PresignResponse};
 pub use control::{
     CoordinatorKey, CreateNamespaceRequest, CreateNamespaceResponse, IssueCapabilityRequest,
-    IssueCapabilityResponse, RegisterAppRequest, RegisterAppResponse, RepairRequest,
+    IssueCapabilityResponse, PruneRequest, RegisterAppRequest, RegisterAppResponse, RepairRequest,
 };
 pub use data::{
     DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RestoredBlob,

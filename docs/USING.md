@@ -456,13 +456,18 @@ Each app's Contract carries a `RetentionPolicy { keep_versions, min_days }`.
   stays zero-knowledge. An early delete is refused with `403 retention_hold`;
   `min_days = 0` disables the hold. Verified: a delete under a 7-day hold is
   refused and the blob remains listed; with no hold, delete succeeds.
-- **`keep_versions` — not yet enforced.** Version pruning needs a client-supplied
-  opaque object id to group versions without the server learning filenames (see
-  "Shared filename index"); it's declared on the Contract but not swept yet.
+- **`keep_versions` — enforced.** Each backup is tagged with an opaque
+  `object_id = HMAC(index_key, filename)` where `index_key = PBKDF2(passphrase,
+  salt=namespace)` — stable across versions of a file, bound to the vault, and
+  revealing nothing about the name. `POST /v1/maintenance/prune {namespace,
+  object_id}` keeps the newest `keep_versions` and deletes older ones, but never
+  a version still under its `min_days` hold. Both clients tag + prune on upload;
+  `keep_versions = 0` means unlimited. Verified: 4 uploads of one file with
+  `keep_versions=2` leave 2 versions and still restore the latest, and the
+  browser and `vaultfile.py` derive identical `object_id`s (cross-client grouping).
 
 ## Remaining hardening (this reference build)
 
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
-- `keep_versions` retention (version pruning) is declarative, not yet enforced.
 
 The ports/adapters architecture is built so each of these is a drop-in swap.

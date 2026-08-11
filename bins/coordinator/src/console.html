@@ -235,9 +235,23 @@ function padName(name){const b=new TextEncoder().encode(name).slice(0,NAME_PAD-2
 function unpadName(bytes){const n=((bytes[0]<<8)|bytes[1]);return new TextDecoder().decode(bytes.slice(2,2+n));}
 async function encName(pass,name){return b64enc(await encryptBytes(pass,padName(name)));}
 async function decName(pass,b64){return unpadName(await decryptBytes(pass,b64dec(b64)));}
+// Opaque version-group id: HMAC(index_key, name), index_key=PBKDF2(pass, ns).
+// Stable across versions of a file, bound to the vault, reveals nothing.
+async function objectId(pass,ns,name){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(ns),iterations:KDF_ITERS,hash:'SHA-256'},base,256);
+  const hk=await crypto.subtle.importKey('raw',bits,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const sig=new Uint8Array(await crypto.subtle.sign('HMAC',hk,new TextEncoder().encode(name)));
+  return [...sig].map(b=>b.toString(16).padStart(2,'0')).join('');}
 async function publishName(ns,blob,name){const k=keyOf(ns);if(!k)return;
-  try{await api(CO+'/v1/meta/namespaces/'+ns+'/manifests/'+blob+'/name',
-    {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name_enc:await encName(k,name)})});}catch(e){}}
+  try{
+    const oid=await objectId(k,ns,name);
+    await api(CO+'/v1/meta/namespaces/'+ns+'/manifests/'+blob+'/name',
+      {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name_enc:await encName(k,name),object_id:oid})});
+    // enforce keep_versions for this file (older versions beyond the limit)
+    try{await api(nodeUrl()+'/v1/maintenance/prune',
+      {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({namespace:ns,object_id:oid})});}catch(e){}
+  }catch(e){}}
 
 const keyOf=ns=>sessionStorage.getItem('vm.key.'+ns);
 function ensureKey(ns){let k=keyOf(ns);if(k)return k;

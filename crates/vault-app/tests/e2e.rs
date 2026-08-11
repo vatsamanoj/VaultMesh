@@ -11,11 +11,12 @@ use adapter_memstore::MemoryMetadataStore;
 use adapter_reed_solomon::ReedSolomonCoder;
 use tempfile::TempDir;
 use vault_app::{
-    CreateNamespace, DeleteBackup, GetBackup, IssueCapability, ListBackups, PutBackup, RegisterApp,
+    CreateNamespace, DeleteBackup, GetBackup, IssueCapability, ListBackups, PruneVersions,
+    PutBackup, RegisterApp,
 };
 use vault_domain::{
-    AppId, CapabilityClaims, DomainError, ErasureParams, NamespaceId, Nonce, Operation, Quota,
-    RetentionPolicy, Timestamp,
+    AppId, BlobId, CapabilityClaims, DomainError, ErasureParams, NamespaceId, Nonce, Operation,
+    Quota, RetentionPolicy, Timestamp,
 };
 use vault_ports::{
     AuthVerifier, BlobAnchor, CapabilitySigner, Clock, Cryptographer, ErasureCoder, IdSource,
@@ -32,6 +33,7 @@ struct Ctx {
     get: GetBackup,
     list: ListBackups,
     delete: DeleteBackup,
+    prune: PruneVersions,
     root: PathBuf,
     _tmp: TempDir,
 }
@@ -73,6 +75,7 @@ fn ctx() -> Ctx {
         verifier.clone(),
         clock.clone(),
     );
+    let prune = PruneVersions::new(metadata.clone(), anchor.clone(), clock.clone());
 
     Ctx {
         metadata,
@@ -84,6 +87,7 @@ fn ctx() -> Ctx {
         get,
         list,
         delete,
+        prune,
         root,
         _tmp: tmp,
     }
@@ -140,6 +144,23 @@ impl Ctx {
             .crypto
             .derive_key(b"app-secret", ns.as_str().as_bytes());
         self.crypto.decrypt(&key, ciphertext).unwrap()
+    }
+
+    /// Simulate a client publishing an object_id + a deterministic created_at
+    /// (so version ordering is unambiguous in tests).
+    async fn tag(&self, ns: &NamespaceId, blob: &BlobId, object_id: &str, created_at: Timestamp) {
+        let mut m = self.metadata.get_manifest(ns, blob).await.unwrap().unwrap();
+        m.object_id = Some(object_id.to_string());
+        m.created_at = created_at;
+        self.metadata.put_manifest(&m).await.unwrap();
+    }
+
+    async fn put_blob(&self, app: &AppId, ns: &NamespaceId, payload: &[u8]) -> BlobId {
+        let tok = self.token(app, ns, Operation::Put).await;
+        self.put
+            .execute(ns, &tok, &self.seal(ns, payload))
+            .await
+            .unwrap()
     }
 }
 
@@ -200,6 +221,62 @@ async fn delete_blocked_by_min_days_retention_hold() {
     // Nothing was deleted — the blob is still listed.
     let list_tok = c.token(&app, &ns, Operation::List).await;
     assert_eq!(c.list.execute(&ns, &list_tok).await.unwrap(), vec![blob]);
+}
+
+/// keep_versions pruning: keep the newest N versions of one opaque object group
+/// and delete the older ones. Other object groups are untouched.
+#[tokio::test]
+async fn prune_keeps_newest_versions_and_deletes_older() {
+    let c = ctx();
+    let (app, ns) = c.onboard_with(2, 0).await; // keep 2, no hold
+
+    // 4 versions of "report" (object_id = grpA), created_at 100..103.
+    let mut grp = Vec::new();
+    for i in 0..4u64 {
+        let b = c
+            .put_blob(&app, &ns, format!("report v{i}").as_bytes())
+            .await;
+        c.tag(&ns, &b, "grpA", Timestamp(100 + i)).await;
+        grp.push(b);
+    }
+    // An unrelated file in another group must survive pruning.
+    let other = c.put_blob(&app, &ns, b"unrelated").await;
+    c.tag(&ns, &other, "grpB", Timestamp(50)).await;
+
+    let report = c.prune.execute(&ns, "grpA").await.unwrap();
+    assert_eq!(report.versions, 4);
+    assert_eq!(report.kept, 2);
+    assert_eq!(report.pruned, 2);
+    assert_eq!(report.held, 0);
+
+    // Newest two of grpA (indices 2,3) + grpB remain; oldest two are gone.
+    let mut remaining = c.metadata.list_blobs(&ns).await.unwrap();
+    remaining.sort();
+    let mut expected = vec![grp[2].clone(), grp[3].clone(), other];
+    expected.sort();
+    assert_eq!(remaining, expected);
+}
+
+/// Pruning never deletes a version still under its `min_days` retention hold,
+/// even when it exceeds keep_versions.
+#[tokio::test]
+async fn prune_respects_retention_hold() {
+    let c = ctx();
+    let (app, ns) = c.onboard_with(1, 30).await; // keep 1, 30-day hold
+    let now = c.clock.now().0;
+
+    // 3 recent versions (all within the 30-day hold).
+    for i in 0..3u64 {
+        let b = c.put_blob(&app, &ns, format!("v{i}").as_bytes()).await;
+        c.tag(&ns, &b, "grp", Timestamp(now - i)).await;
+    }
+
+    let report = c.prune.execute(&ns, "grp").await.unwrap();
+    assert_eq!(report.versions, 3);
+    assert_eq!(report.kept, 1, "newest kept by policy");
+    assert_eq!(report.held, 2, "older-but-held retained by min_days");
+    assert_eq!(report.pruned, 0);
+    assert_eq!(c.metadata.list_blobs(&ns).await.unwrap().len(), 3);
 }
 
 /// With no hold (`min_days = 0`), deletion is allowed immediately.

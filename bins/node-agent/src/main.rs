@@ -37,7 +37,7 @@ use remote_meta::RemoteMetadataStore;
 use state::AppState;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup, RepairShards};
+use vault_app::{DeleteBackup, GetBackup, ListBackups, PruneVersions, PutBackup, RepairShards};
 use vault_domain::PlacementPolicy;
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
@@ -191,8 +191,9 @@ fn router(state: AppState) -> Router {
             "/v1/peer/shards/:ns/:blob/:index",
             put(routes::peer_put_shard).get(routes::peer_get_shard),
         )
-        // Maintenance plane: on-demand self-healing repair.
+        // Maintenance plane: on-demand self-healing repair + version pruning.
         .route("/v1/maintenance/repair", post(routes::repair))
+        .route("/v1/maintenance/prune", post(routes::prune))
         // Let a browser chat client reach the data plane cross-origin.
         .layer(axum::middleware::from_fn(cors::permissive))
         .with_state(state)
@@ -300,6 +301,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             clock.clone(),
         )),
         repair: Arc::new(repair),
+        prune: Arc::new(PruneVersions::new(
+            metadata.clone(),
+            anchor.clone(),
+            clock.clone(),
+        )),
         anchor: anchor.clone(),
     };
 

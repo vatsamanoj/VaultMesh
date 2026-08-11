@@ -93,11 +93,15 @@ pub async fn list_blobs(
 pub struct SetNameRequest {
     /// base64 of a `VMB1` envelope encrypting the length-padded filename.
     pub name_enc: String,
+    /// Opaque HMAC(index_key, filename) grouping this file's versions (optional).
+    #[serde(default)]
+    pub object_id: Option<String>,
 }
 
-/// Attach the client-encrypted filename to a manifest (the shared name index).
-/// The coordinator stores it verbatim — it is ciphertext, so names stay
-/// zero-knowledge while becoming visible to any client holding the vault key.
+/// Attach the client-encrypted filename (and optional opaque object id) to a
+/// manifest — the shared name index + version-grouping tag. Both are opaque to
+/// the coordinator, so names and grouping stay zero-knowledge while becoming
+/// usable by any client holding the vault key.
 pub async fn set_manifest_name(
     State(st): State<AppState>,
     Path((ns, blob)): Path<(String, String)>,
@@ -111,6 +115,9 @@ pub async fn set_manifest_name(
         .map_err(err)?
         .ok_or_else(|| err(PortError::NotFound))?;
     manifest.name_enc = Some(req.name_enc);
+    if req.object_id.is_some() {
+        manifest.object_id = req.object_id;
+    }
     st.metadata.put_manifest(&manifest).await.map_err(err)
 }
 

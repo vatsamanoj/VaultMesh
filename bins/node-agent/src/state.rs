@@ -2,7 +2,7 @@
 //! the local anchor for serving peer-mesh shard requests.
 
 use std::sync::Arc;
-use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup, RepairShards};
+use vault_app::{DeleteBackup, GetBackup, ListBackups, PruneVersions, PutBackup, RepairShards};
 use vault_ports::BlobAnchor;
 
 /// Cloneable handle for axum handlers. Each field is a ready-to-run use-case.
@@ -13,6 +13,7 @@ pub struct AppState {
     pub list: Arc<ListBackups>,
     pub delete: Arc<DeleteBackup>,
     pub repair: Arc<RepairShards>,
+    pub prune: Arc<PruneVersions>,
     /// Local anchor, used to store/serve shards for peers (P2 mesh).
     pub anchor: Arc<dyn BlobAnchor>,
 }

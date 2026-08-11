@@ -64,3 +64,10 @@ pub struct RepairRequest {
     pub namespace: NamespaceId,
     pub blob_id: vault_domain::BlobId,
 }
+
+/// Trigger `keep_versions` pruning of one opaque object group (maintenance plane).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PruneRequest {
+    pub namespace: NamespaceId,
+    pub object_id: String,
+}

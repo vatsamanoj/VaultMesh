@@ -54,6 +54,11 @@ pub struct Manifest {
     /// blobs uploaded without a published name (older or headless writers).
     #[serde(default)]
     pub name_enc: Option<String>,
+    /// Opaque logical-file id — `HMAC(index_key, filename)` computed client-side.
+    /// Groups versions of the same file for `keep_versions` pruning without the
+    /// server learning the name. `None` for blobs with no published grouping.
+    #[serde(default)]
+    pub object_id: Option<String>,
 }
 
 impl Manifest {
@@ -73,6 +78,7 @@ impl Manifest {
             ciphertext_len,
             created_at,
             name_enc: None,
+            object_id: None,
         }
     }
 
