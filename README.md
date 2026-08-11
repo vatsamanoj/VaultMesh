@@ -73,7 +73,8 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+See [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) for a live end-to-end run
+(`./scripts/demo.sh`), plus [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
