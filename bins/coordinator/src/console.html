@@ -102,7 +102,10 @@
   /* modal */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
   .scrim.show{display:flex}
-  .modal{background:var(--panel);border-radius:12px;max-width:440px;width:100%;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.3)}
+  .modal{background:var(--panel);border-radius:12px;max-width:460px;width:100%;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.3);max-height:92vh;overflow:auto}
+  .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:14px}
+  .mgrid label{margin-bottom:4px}
+  .mgrid input{padding:8px 10px}
   .modal h3{margin:0 0 4px}
   .modal p{margin:0 0 16px;color:var(--muted);font-size:13.5px}
   .modal label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
@@ -173,6 +176,14 @@
     <div id="mBody">
       <label>Label (e.g. "alice-laptop")</label>
       <input id="mLabel" placeholder="node" />
+      <div class="mgrid">
+        <div><label>Quota (GB)</label><input id="mQuota" type="number" min="0" step="0.5" value="1"/></div>
+        <div><label>Max objects</label><input id="mObjects" type="number" min="1" value="10000"/></div>
+        <div><label>Keep versions</label><input id="mKeep" type="number" min="0" value="3"/></div>
+        <div><label>Min days (hold)</label><input id="mMinDays" type="number" min="0" value="30"/></div>
+        <div><label>Erasure k (data)</label><input id="mK" type="number" min="1" value="4"/></div>
+        <div><label>Erasure n (total)</label><input id="mN" type="number" min="1" value="6"/></div>
+      </div>
     </div>
     <div class="row">
       <button class="btn ghost" id="mCancel">Cancel</button>
@@ -386,13 +397,20 @@ async function restore(ns,f){
 /* ---------- enroll (new chat) ---------- */
 $('#newBtn').onclick=()=>{$('#mLabel').value='';$('#scrim').classList.add('show');setTimeout(()=>$('#mLabel').focus(),50);};
 $('#mCancel').onclick=()=>$('#scrim').classList.remove('show');
+const mint=(id,d)=>{const v=parseInt($(id).value,10);return Number.isFinite(v)&&v>=0?v:d;};
 $('#mOk').onclick=async()=>{
   const label=$('#mLabel').value.trim()||'node';$('#mOk').disabled=true;
+  const gb=parseFloat($('#mQuota').value);
+  const terms={
+    quota_bytes:Math.round((Number.isFinite(gb)&&gb>=0?gb:1)*1073741824),
+    max_objects:mint('#mObjects',10000),keep_versions:mint('#mKeep',3),
+    min_days:mint('#mMinDays',30),erasure_k:mint('#mK',4),erasure_n:mint('#mN',6)};
+  if(terms.erasure_n<terms.erasure_k){alert('Erasure n must be ≥ k.');$('#mOk').disabled=false;return;}
   try{
     let res;
-    if(LIVE){res=await api(CO+'/v1/admin/enroll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({label})});}
+    if(LIVE){res=await api(CO+'/v1/admin/enroll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({label,...terms})});}
     else{res={label,app_id:'app-demo',namespace:'ns-'+Math.random().toString(16).slice(2,18),
-      client_cert_pem:'(demo)',client_key_pem:'(demo)',ca_root_pem:'(demo)'};}
+      client_cert_pem:'(demo)',client_key_pem:'(demo)',ca_root_pem:'(demo)',...terms};}
     chats[res.namespace]={app_id:res.app_id,label,createdAt:Date.now()};saveChats();
     window.__lastEnroll=res;
     $('#scrim').classList.remove('show');
@@ -401,9 +419,11 @@ $('#mOk').onclick=async()=>{
 };
 function showEnrollCard(res){
   const M=$('#messages');const el=document.createElement('div');el.className='sysmsg';
+  const gb=res.quota_bytes!=null?(res.quota_bytes/1073741824):null;
+  const terms=gb!=null?`<b>contract</b><span>${(+gb.toFixed(2))} GB · ${res.max_objects} objects · keep ${res.keep_versions} · hold ${res.min_days}d · ${res.erasure_k}-of-${res.erasure_n}</span>`:'';
   el.innerHTML=`<b>🔐 Vault created & node enrolled.</b>
     <div class="kv"><b>app id</b><span class="mono">${res.app_id}</span>
-    <b>namespace</b><span class="mono">${res.namespace}</span></div>
+    <b>namespace</b><span class="mono">${res.namespace}</span>${terms}</div>
     Download this node’s mTLS identity, then start its node-agent:
     <div class="dlrow">
       <button class="btn ghost" data-p="client_cert_pem" data-f="client.pem">⬇ client.pem</button>
