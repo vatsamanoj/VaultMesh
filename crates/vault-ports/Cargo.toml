@@ -1,0 +1,14 @@
+[package]
+name = "vault-ports"
+description = "VaultMesh ports — the traits the domain depends on; adapters implement them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

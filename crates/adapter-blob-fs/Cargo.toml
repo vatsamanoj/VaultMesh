@@ -1,0 +1,17 @@
+[package]
+name = "adapter-blob-fs"
+description = "VaultMesh filesystem blob anchor — a dev stand-in for the RustFS anchor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,21 @@
+[package]
+name = "vault-app"
+description = "VaultMesh use-cases — orchestrate ports; depend on traits only (DIP)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+adapter-memstore = { workspace = true }
+adapter-blob-fs = { workspace = true }
+adapter-crypto = { workspace = true }
+adapter-erasure = { workspace = true }
+tempfile = "3"

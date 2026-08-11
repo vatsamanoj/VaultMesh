@@ -1,0 +1,17 @@
+# Rust build artifacts
+/target
+**/target
+Cargo.lock.orig
+
+# Local VaultMesh runtime state (never commit blobs, keys, or manifests)
+/.vaultmesh
+*.vaultkey
+*.pem
+*.key
+!tests/**/*.pem
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp

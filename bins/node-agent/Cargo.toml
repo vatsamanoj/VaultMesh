@@ -1,0 +1,30 @@
+[package]
+name = "node-agent"
+description = "VaultMesh node-agent — the per-machine sidecar: localhost data-plane API + local blob anchor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "node-agent"
+path = "src/main.rs"
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+vault-app = { workspace = true }
+vault-proto = { workspace = true }
+adapter-blob-fs = { workspace = true }
+adapter-erasure = { workspace = true }
+adapter-crypto = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,12 @@
+[package]
+name = "adapter-erasure"
+description = "VaultMesh erasure adapter — P0 passthrough/replication coder (Reed-Solomon lands in P1)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }

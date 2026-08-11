@@ -1,0 +1,19 @@
+[package]
+name = "adapter-crypto"
+description = "VaultMesh crypto adapter — AES-256-GCM + HKDF, ed25519 capability tokens, system clock, id source."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+ed25519-dalek = { workspace = true }
+uuid = { workspace = true }
+hex = { workspace = true }

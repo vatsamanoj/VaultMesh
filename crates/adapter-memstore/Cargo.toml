@@ -1,0 +1,14 @@
+[package]
+name = "adapter-memstore"
+description = "VaultMesh in-memory metadata store — P0/dev stand-in for a database-backed store."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vault-domain = { workspace = true }
+vault-ports = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }

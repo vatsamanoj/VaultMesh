@@ -1,0 +1,67 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vault-domain",
+    "crates/vault-ports",
+    "crates/vault-app",
+    "crates/vault-proto",
+    "crates/adapter-crypto",
+    "crates/adapter-blob-fs",
+    "crates/adapter-memstore",
+    "crates/adapter-erasure",
+    "crates/vault-client",
+    "bins/coordinator",
+    "bins/node-agent",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "LicenseRef-Proprietary"
+repository = "https://github.com/vatsamanoj/vaultmesh"
+authors = ["VaultMesh contributors"]
+
+# Shared dependency versions. Individual crates opt in via `workspace = true`.
+# Keep the domain core free of I/O crates (see crates/vault-domain/Cargo.toml).
+[workspace.dependencies]
+# domain-safe (pure) dependencies
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+hex = "0.4"
+
+# port / async plumbing
+async-trait = "0.1"
+
+# runtime & transport (adapters + binaries only)
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tower = "0.5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# crypto adapters
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+
+# internal crates
+vault-domain = { path = "crates/vault-domain" }
+vault-ports = { path = "crates/vault-ports" }
+vault-app = { path = "crates/vault-app" }
+vault-proto = { path = "crates/vault-proto" }
+adapter-crypto = { path = "crates/adapter-crypto" }
+adapter-blob-fs = { path = "crates/adapter-blob-fs" }
+adapter-memstore = { path = "crates/adapter-memstore" }
+adapter-erasure = { path = "crates/adapter-erasure" }
+vault-client = { path = "crates/vault-client" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

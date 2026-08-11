@@ -1,0 +1,18 @@
+[package]
+name = "vault-domain"
+description = "VaultMesh pure domain core — entities and policies, no I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# IMPORTANT: the domain core must stay pure. Do NOT add tokio/sqlx/axum/reqwest/
+# aws/hyper/rustfs here — CI (job `domain-purity`) fails the build if you do.
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
