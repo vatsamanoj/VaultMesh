@@ -9,11 +9,13 @@ mod http;
 mod meta;
 mod perimeter;
 mod state;
+mod tls;
 
 use axum::routing::{get, post};
 use axum::Router;
 use state::AppState;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 fn router(state: AppState) -> Router {
     Router::new()
@@ -60,7 +62,7 @@ fn router(state: AppState) -> Router {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -72,8 +74,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()?;
 
     let state = AppState::in_memory();
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!(%addr, "VaultMesh coordinator listening");
-    axum::serve(listener, router(state)).await?;
+
+    // L1 gate: opt-in mTLS ingress (VAULT_TLS_MODE=mtls). Off by default so the
+    // demo/dev flows stay plain HTTP.
+    if std::env::var("VAULT_TLS_MODE").as_deref() == Ok("mtls") {
+        let sans: Vec<String> = std::env::var("VAULT_TLS_SANS")
+            .unwrap_or_else(|_| "localhost,127.0.0.1".into())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        // Emit the pinned Root CA + a bootstrap client cert so node-agents and
+        // apps can enroll (mirrors "installers bake the root").
+        let dir = std::env::var("VAULT_CERT_DIR").unwrap_or_else(|_| "./certs".into());
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(format!("{dir}/ca-root.pem"), state.ca.root_pem())?;
+        let client = state.ca.issue_client("bootstrap-app")?;
+        std::fs::write(format!("{dir}/client.pem"), &client.cert_pem)?;
+        std::fs::write(format!("{dir}/client.key"), &client.key_pem)?;
+
+        let cfg = tls::mtls_server_config(&state.ca, &sans)?;
+        let rustls_config = axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(cfg));
+        tracing::info!(%addr, certs = %dir, "VaultMesh coordinator listening (mTLS — client cert REQUIRED)");
+        axum_server::bind_rustls(addr, rustls_config)
+            .serve(router(state).into_make_service())
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        tracing::info!(%addr, "VaultMesh coordinator listening (plain HTTP)");
+        axum::serve(listener, router(state)).await?;
+    }
     Ok(())
 }

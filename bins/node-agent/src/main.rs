@@ -13,6 +13,8 @@
 //! - `VAULT_TRANSPORT`        `http` (default, P2) or `quic` (P4 direct P2P).
 //! - `VAULT_QUIC_ADDR`        QUIC shard-server bind address (default `0.0.0.0:8791`).
 //! - `VAULT_REPAIR_SECS`      background repair-sweep interval (0 disables).
+//! - `VAULT_CLIENT_CERT`/`VAULT_CLIENT_KEY`/`VAULT_CA_CERT`  mTLS identity + CA
+//!   the node-agent presents to (and trusts on) an mTLS coordinator.
 
 mod http;
 mod remote_meta;
@@ -39,16 +41,44 @@ use vault_ports::{
 };
 use vault_proto::CoordinatorKey;
 
+/// Build the HTTP client used for coordinator calls. When `VAULT_CLIENT_CERT` /
+/// `VAULT_CLIENT_KEY` (and optionally `VAULT_CA_CERT`) are set, it carries an
+/// mTLS client identity so it can pass the coordinator's L1 gate.
+fn coordinator_client() -> Result<reqwest::Client, Box<dyn std::error::Error>> {
+    let mut builder = reqwest::Client::builder();
+    if let (Ok(cert), Ok(key)) = (
+        std::env::var("VAULT_CLIENT_CERT"),
+        std::env::var("VAULT_CLIENT_KEY"),
+    ) {
+        let mut pem = std::fs::read(cert)?;
+        pem.extend_from_slice(&std::fs::read(key)?);
+        builder = builder.identity(reqwest::Identity::from_pem(&pem)?);
+    }
+    if let Ok(ca) = std::env::var("VAULT_CA_CERT") {
+        builder =
+            builder.add_root_certificate(reqwest::Certificate::from_pem(&std::fs::read(ca)?)?);
+    }
+    Ok(builder.build()?)
+}
+
 /// Fetch the coordinator's capability-verification key so the node-agent can
 /// verify tokens (L2). Retries with backoff so startup ordering is forgiving.
-async fn fetch_verifier(coordinator: &str) -> Result<Ed25519Verifier, Box<dyn std::error::Error>> {
+async fn fetch_verifier(
+    client: &reqwest::Client,
+    coordinator: &str,
+) -> Result<Ed25519Verifier, Box<dyn std::error::Error>> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
 
     let url = format!("{coordinator}/v1/coordinator/pubkey");
     let mut last_err: Option<Box<dyn std::error::Error>> = None;
     for attempt in 0..10 {
-        match reqwest::get(&url).await.and_then(|r| r.error_for_status()) {
+        match client
+            .get(&url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+        {
             Ok(resp) => {
                 let key: CoordinatorKey = resp.json().await?;
                 let bytes = STANDARD.decode(key.public_key_b64)?;
@@ -171,12 +201,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|s| !s.is_empty())
         .collect();
 
+    // Coordinator HTTP client (carries an mTLS identity if configured).
+    let coord_client = coordinator_client()?;
+
     // Adapters behind their ports.
-    let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(coordinator.clone()));
+    let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(
+        coordinator.clone(),
+        coord_client.clone(),
+    ));
     let anchor: Arc<dyn BlobAnchor> = build_anchor(&anchor_root)?;
     let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
-    let verifier: Arc<dyn AuthVerifier> = Arc::new(fetch_verifier(&coordinator).await?);
+    let verifier: Arc<dyn AuthVerifier> =
+        Arc::new(fetch_verifier(&coord_client, &coordinator).await?);
     let ids: Arc<dyn IdSource> = Arc::new(RandomIdSource::new());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
 

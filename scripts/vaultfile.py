@@ -24,6 +24,7 @@ Environment:
 import base64
 import json
 import os
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -36,11 +37,26 @@ SIDECAR = os.environ.get("VAULT_SIDECAR_URL", "http://127.0.0.1:8790")
 CONFIG = os.environ.get("VAULT_CONFIG", "vault.json")
 
 
+def _tls_context():
+    """mTLS client identity for an https coordinator (VAULT_CLIENT_CERT/KEY/CA)."""
+    cert = os.environ.get("VAULT_CLIENT_CERT")
+    if not cert:
+        return None
+    ca = os.environ.get("VAULT_CA_CERT")
+    ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
+    ctx.load_cert_chain(certfile=cert, keyfile=os.environ.get("VAULT_CLIENT_KEY"))
+    return ctx
+
+
+_CTX = _tls_context()
+
+
 def _post(url, obj):
     data = json.dumps(obj).encode()
     req = urllib.request.Request(url, data=data, headers={"content-type": "application/json"}, method="POST")
+    ctx = _CTX if url.startswith("https") else None
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, context=ctx) as resp:
             body = resp.read().decode()
             return json.loads(body) if body.strip() else {}
     except urllib.error.HTTPError as e:

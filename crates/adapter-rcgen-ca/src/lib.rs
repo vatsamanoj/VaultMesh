@@ -10,13 +10,38 @@
 //! the root key offline and uses an online issuing intermediate.
 
 use async_trait::async_trait;
-use rcgen::{BasicConstraints, Certificate, CertificateParams, IsCa, KeyPair};
+use rcgen::{
+    BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, Ia5String,
+    IsCa, KeyPair, KeyUsagePurpose, SanType,
+};
 use std::collections::HashSet;
+use std::net::IpAddr;
 use std::sync::Mutex;
 use vault_ports::{CertAuthority, PortError, PortResult};
 
 fn crypto(e: impl std::fmt::Display) -> PortError {
     PortError::Crypto(format!("rcgen-ca: {e}"))
+}
+
+/// A TLS server identity (leaf signed by the CA), DER-encoded for rustls.
+pub struct ServerIdentity {
+    pub cert_der: Vec<u8>,
+    pub key_der: Vec<u8>,
+}
+
+/// A TLS client identity (leaf signed by the CA), PEM-encoded.
+pub struct ClientIdentity {
+    pub cert_pem: String,
+    pub key_pem: String,
+}
+
+fn san_of(s: &str) -> PortResult<SanType> {
+    match s.parse::<IpAddr>() {
+        Ok(ip) => Ok(SanType::IpAddress(ip)),
+        Err(_) => Ok(SanType::DnsName(
+            Ia5String::try_from(s.to_string()).map_err(crypto)?,
+        )),
+    }
 }
 
 pub struct RcgenCertAuthority {
@@ -43,6 +68,51 @@ impl RcgenCertAuthority {
     /// The pinned Root CA certificate (PEM) baked into installers.
     pub fn root_pem(&self) -> String {
         self.ca_cert.pem()
+    }
+
+    /// DER of the Root CA cert — for a rustls trust root / client verifier.
+    pub fn root_cert_der(&self) -> Vec<u8> {
+        self.ca_cert.der().as_ref().to_vec()
+    }
+
+    /// Issue a TLS **server** cert (CA-signed) for the given SANs (DNS names and
+    /// IPs). Used for the coordinator's mTLS ingress.
+    pub fn issue_server(&self, sans: &[String]) -> PortResult<ServerIdentity> {
+        let key = KeyPair::generate().map_err(crypto)?;
+        let mut params = CertificateParams::new(Vec::<String>::new()).map_err(crypto)?;
+        params.subject_alt_names = sans.iter().map(|s| san_of(s)).collect::<PortResult<_>>()?;
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "vaultmesh-coordinator");
+        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyEncipherment,
+        ];
+        let cert = params
+            .signed_by(&key, &self.ca_cert, &self.ca_key)
+            .map_err(crypto)?;
+        Ok(ServerIdentity {
+            cert_der: cert.der().as_ref().to_vec(),
+            key_der: key.serialize_der(),
+        })
+    }
+
+    /// Issue a TLS **client** cert (CA-signed) for an app/node to present at the
+    /// mTLS handshake (the L1 gate).
+    pub fn issue_client(&self, subject: &str) -> PortResult<ClientIdentity> {
+        let key = KeyPair::generate().map_err(crypto)?;
+        let mut params = CertificateParams::new(vec![subject.to_string()]).map_err(crypto)?;
+        params.distinguished_name.push(DnType::CommonName, subject);
+        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+        params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        let cert = params
+            .signed_by(&key, &self.ca_cert, &self.ca_key)
+            .map_err(crypto)?;
+        Ok(ClientIdentity {
+            cert_pem: cert.pem(),
+            key_pem: key.serialize_pem(),
+        })
     }
 }
 

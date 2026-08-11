@@ -123,12 +123,43 @@ at `s3://<bucket>/<namespace>/<blob>/<index>.shard`. Verified end-to-end: a real
 file backed up via `vaultfile.py` stored its six shards in the bucket (no
 plaintext in any of them) and restored byte-identical.
 
+## mTLS (the L1 gate)
+
+The coordinator can require every caller to present a **client certificate
+signed by the VaultMesh CA** — no/invalid cert → the TLS handshake fails and the
+request never reaches app code. It's opt-in via `VAULT_TLS_MODE=mtls`:
+
+```sh
+VAULT_TLS_MODE=mtls VAULT_CERT_DIR=./certs coordinator
+```
+
+On startup it emits, into `VAULT_CERT_DIR`, the pinned Root CA plus a bootstrap
+client identity (mirroring "installers bake the root"):
+
+- `ca-root.pem` — pin this to trust the coordinator's server cert.
+- `client.pem` + `client.key` — a CA-signed client cert to present.
+
+Then point the node-agent and app at HTTPS + those certs:
+
+```sh
+# node-agent
+VAULT_COORDINATOR_URL=https://coordinator:8787 \
+VAULT_CA_CERT=./certs/ca-root.pem \
+VAULT_CLIENT_CERT=./certs/client.pem VAULT_CLIENT_KEY=./certs/client.key  node-agent
+
+# vaultfile.py (the app)
+$env:VAULT_COORDINATOR_URL="https://coordinator:8787"
+$env:VAULT_CA_CERT="ca-root.pem"; $env:VAULT_CLIENT_CERT="client.pem"; $env:VAULT_CLIENT_KEY="client.key"
+```
+
+Verified: a valid client cert → `HTTP 200`; **no** client cert → handshake
+rejected (`certificate required`); a **different-CA** client cert → rejected
+(`certificate unknown`). Backup/restore works unchanged over the mTLS channel.
+
+`VAULT_TLS_SANS` (default `localhost,127.0.0.1`) sets the server cert's names.
+
 ## Remaining hardening (this reference build)
 
-- The self-signed CA exists, but the HTTP ingress does **not yet require mTLS
-  client certs** — so L1 (client-cert) isn't enforced on the wire in this build.
-  L2 (capability tokens), L3 (namespace ACL), and L4 (client-side encryption)
-  are enforced.
 - Node-agents talk to RustFS directly; hardening to coordinator-issued,
   path-scoped **presigned URLs** (so the anchor is never reachable by clients) is
   a later step behind the same `BlobAnchor` port.

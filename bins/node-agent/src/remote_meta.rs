@@ -17,10 +17,12 @@ pub struct RemoteMetadataStore {
 }
 
 impl RemoteMetadataStore {
-    pub fn new(base: impl Into<String>) -> Self {
+    /// Uses the caller-provided client so it can carry an mTLS identity when the
+    /// coordinator requires client certs.
+    pub fn new(base: impl Into<String>, http: Client) -> Self {
         Self {
             base: base.into(),
-            http: Client::new(),
+            http,
         }
     }
 

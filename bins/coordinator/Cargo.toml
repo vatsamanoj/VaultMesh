@@ -23,6 +23,9 @@ adapter-rcgen-ca = { workspace = true }
 adapter-ddns = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 base64 = { workspace = true }

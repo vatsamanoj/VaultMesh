@@ -37,7 +37,7 @@ it — the node-agent gets short-lived, path-scoped presigned URLs per operation
 
 | Layer | Check | A stolen/forged credential yields |
 |-------|-------|-----------------------------------|
-| **L1 mTLS app cert** (private CA) | "this is a vendor app/install"; revocable | nothing without a valid, unrevoked cert |
+| **L1 mTLS app cert** (private CA) | "this is a vendor app/install"; revocable — **enforced** at the coordinator ingress (`VAULT_TLS_MODE=mtls`): no/wrong-CA client cert → handshake rejected | nothing without a valid, unrevoked cert |
 | **L2 Capability token** | signed `{namespace, op, nonce, expiry}`, minutes-TTL | single-namespace, single-op, expires fast |
 | **L3 Namespace ACL** | cert's `AppId` must own the namespace | App A can never read App B's blobs |
 | **L4 Client-side encryption** | AES-256-GCM, key VaultMesh never holds | zero plaintext even on full server compromise |
