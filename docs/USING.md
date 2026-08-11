@@ -179,6 +179,81 @@ rejected (`certificate required`); a **different-CA** client cert → rejected
 
 `VAULT_TLS_SANS` (default `localhost,127.0.0.1`) sets the server cert's names.
 
+## Self-hosting on your own machine (public IP + router, no cloud)
+
+You do **not** need a cloud host or a "public HTTPS" certificate. VaultMesh's own
+CA + mTLS *is* the trust root, so the only thing a remote user needs is to be
+able to **reach** your coordinator. If you have a high-speed connection with a
+public IP and control of your router, one machine can be the whole backend —
+coordinator **and** anchor — reachable at a stable name via port-forward +
+dynamic DNS. Trust comes from your CA; the network just has to carry the bytes.
+
+**What crosses the internet:** node-agent → coordinator (metadata, tokens,
+presigned-URL requests) and node-agent → anchor (encrypted shards). Both are
+authenticated by your CA; content stays client-side encrypted.
+
+### 1. A stable name for a changing IP (dynamic DNS)
+
+Home/business links usually have a *dynamic* public IP. Point a free dynamic-DNS
+hostname at it and keep it current (DuckDNS shown; any provider works):
+
+```sh
+# cron, every 5 min — keeps vault.duckdns.org pointed at your current IP
+*/5 * * * * curl -s "https://www.duckdns.org/update?domains=vault&token=YOUR_TOKEN&ip="
+```
+
+### 2. Forward two ports on your router
+
+Forward these TCP ports to the machine's LAN address (e.g. `192.168.1.20`):
+
+- **8787** → coordinator (control plane)
+- **9000** → the object store (RustFS/MinIO), so presigned URLs are reachable
+
+An open port is not open access: the coordinator's mTLS gate rejects the TLS
+handshake for anyone without a client cert you issued.
+
+### 3. Run the anchor + coordinator on the machine
+
+```sh
+# object store on the same box (RustFS or any S3-compatible server on :9000)
+#   create the bucket once, e.g. `vaultmesh`.
+
+# coordinator: mTLS on, server cert valid for your public hostname,
+# and S3 creds so it can mint presigned URLs.
+VAULT_COORDINATOR_ADDR=0.0.0.0:8787 \
+VAULT_TLS_MODE=mtls VAULT_CERT_DIR=./certs \
+VAULT_TLS_SANS=vault.duckdns.org,localhost,127.0.0.1 \
+VAULT_S3_ENDPOINT=https://vault.duckdns.org:9000 \
+VAULT_S3_BUCKET=vaultmesh VAULT_S3_ACCESS_KEY=... VAULT_S3_SECRET_KEY=... \
+  coordinator
+```
+
+`VAULT_TLS_SANS` **must** include your public hostname or node-agents will
+reject the server cert. `VAULT_S3_ENDPOINT` **must** be the reachable hostname
+(not `127.0.0.1`) — presigned URLs embed it, and the remote node-agent connects
+to whatever host the URL names.
+
+### 4. Enroll a remote user (hand them three things)
+
+From `VAULT_CERT_DIR` the coordinator emits `ca-root.pem` + a `client.pem` /
+`client.key`. Give each remote user: your **hostname**, the **`ca-root.pem`** to
+pin, and a **client cert**. (This reference build emits one bootstrap client
+cert; per-user certs are the next step — see below.)
+
+### 5. The remote user's node-agent (no S3 creds needed)
+
+```sh
+VAULT_COORDINATOR_URL=https://vault.duckdns.org:8787 \
+VAULT_CA_CERT=ca-root.pem \
+VAULT_CLIENT_CERT=client.pem VAULT_CLIENT_KEY=client.key \
+VAULT_ANCHOR=presigned \
+  node-agent
+```
+
+Their app (`vaultfile.py`) then talks to `127.0.0.1:8790` and backs up files —
+encrypted on their machine, sharded, and pushed to your anchor through
+coordinator-issued presigned URLs. You host the bytes; you never see plaintext.
+
 ## Remaining hardening (this reference build)
 
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
