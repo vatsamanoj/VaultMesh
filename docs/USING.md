@@ -4,6 +4,11 @@ The demo backs up random bytes. This shows how a **real app** connects, how
 **nodes** connect, and how **files** are uploaded and downloaded — plus a ready
 file-backup client (`scripts/vaultfile.py`).
 
+> **Prefer pictures?** [`docs/walkthrough.html`](walkthrough.html) is a
+> self-contained visual tour — register → upload → restore → durability →
+> repair → self-healing → perimeter — built from real screenshots of the
+> running app. Open it in a browser.
+
 ## The pieces and how they connect
 
 ```
