@@ -19,6 +19,11 @@ pub async fn console() -> Html<&'static str> {
     Html(include_str!("console.html"))
 }
 
+/// The active-perimeter dashboard: blocklist + tamper-evident intrusion ledger.
+pub async fn security() -> Html<&'static str> {
+    Html(include_str!("console_security.html"))
+}
+
 #[derive(Deserialize, Default)]
 pub struct EnrollRequest {
     #[serde(default)]

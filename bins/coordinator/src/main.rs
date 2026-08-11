@@ -23,6 +23,7 @@ fn router(state: AppState) -> Router {
     Router::new()
         // operator console (admin plane — bind to overlay/localhost)
         .route("/", get(console::console))
+        .route("/security", get(console::security))
         .route("/v1/admin/enroll", post(console::enroll))
         // control plane
         .route("/health", get(control::health))

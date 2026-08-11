@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VaultMesh Perimeter</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#12161c; --muted:#5b6675; --line:#e4e8ee;
+    --brand:#b3261e; --chip:#eef2f8; --ok:#1a7f52; --bad:#b3261e; --warn:#b4531a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0b0e13; --panel:#141a22; --ink:#e6edf3; --muted:#93a1b0; --line:#243040;
+    --brand:#ff6a5e; --chip:#1b232e; --ok:#3fb981;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.45}
+  header{display:flex;align-items:center;gap:13px;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--brand),#7a1a15);display:grid;place-items:center;color:#fff;font-size:17px}
+  h1{font-size:16px;margin:0;font-weight:650}
+  h1 span{color:var(--muted);font-weight:400}
+  .pills{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--muted)}
+  .pill b{color:var(--ink);font-weight:600}
+  .pill.ok b{color:var(--ok)} .pill.bad b{color:var(--bad)}
+  main{max-width:1040px;margin:0 auto;padding:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 3px;font-size:15px}
+  .card p.sub{margin:0 0 14px;color:var(--muted);font-size:13px}
+  .blocklist{display:flex;gap:8px;flex-wrap:wrap}
+  .blk{font-family:var(--mono);font-size:13px;background:rgba(179,38,30,.12);color:var(--bad);border:1px solid rgba(179,38,30,.4);border-radius:8px;padding:5px 11px;font-weight:600}
+  .empty{color:var(--muted);font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,.mono{font-family:var(--mono);font-size:12.5px}
+  .cls{font-size:11.5px;border-radius:5px;padding:1px 7px;font-weight:600;white-space:nowrap}
+  .c-authorization_violation,.c-bad_or_forged_credential{background:rgba(179,38,30,.14);color:var(--bad)}
+  .c-blocked_fingerprint{background:var(--brand);color:#fff}
+  .c-abuse_or_dos,.c-suspicious{background:rgba(180,83,26,.16);color:var(--warn)}
+  .hash{color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🛡</div>
+  <h1>VaultMesh <span>· Active Perimeter</span></h1>
+  <div class="pills">
+    <span class="pill">protocol <b id="p-proto">–</b></span>
+    <span class="pill">namespaces <b id="p-ns">–</b></span>
+    <span class="pill">intrusions <b id="p-intr">–</b></span>
+    <span class="pill" id="p-chainpill">ledger <b id="p-chain">–</b></span>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <h2>Blocklist</h2>
+    <p class="sub">Fingerprints (JA3/JA4 stand-in) auto-blocked after repeated auth/authz violations. Blocked callers are dropped at the earliest layer — before any app logic.</p>
+    <div class="blocklist" id="blocklist"><span class="empty">none blocked</span></div>
+  </div>
+  <div class="card">
+    <h2>Intrusion ledger <span style="font-weight:400;color:var(--muted)">— tamper-evident hash chain</span></h2>
+    <p class="sub">Every rejected request is recorded and chained (each entry hashes the previous), so the audit trail can't be silently altered. Newest first.</p>
+    <table><thead><tr><th>#</th><th>Time</th><th>Fingerprint</th><th>Class</th><th>Reason</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="empty">No intrusions recorded.</td></tr></tbody></table>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const hms=ms=>{const v=Number(ms)||0;return v?new Date(v).toISOString().replace('T',' ').slice(11,19):'–';};
+async function tick(){
+  try{
+    const [st,intr]=await Promise.all([
+      fetch('/v1/admin/status').then(r=>r.json()),
+      fetch('/v1/admin/intrusions').then(r=>r.json())]);
+    $('#p-proto').textContent=st.protocol_version;
+    $('#p-ns').textContent=st.namespaces;
+    $('#p-intr').textContent=st.intrusion_count;
+    const valid=intr.chain_valid;
+    $('#p-chain').textContent=valid?'valid ✓':'TAMPERED ✗';
+    $('#p-chainpill').className='pill '+(valid?'ok':'bad');
+    // blocklist
+    const bl=$('#blocklist');bl.innerHTML='';
+    if(!intr.blocked.length){bl.innerHTML='<span class="empty">none blocked</span>';}
+    else intr.blocked.forEach(f=>{const s=document.createElement('span');s.className='blk';s.textContent='⛔ '+f;bl.appendChild(s);});
+    // ledger (newest first)
+    const rows=$('#rows');const es=(intr.entries||[]).slice().reverse();
+    if(!es.length){rows.innerHTML='<tr><td colspan="5" class="empty">No intrusions recorded.</td></tr>';return;}
+    rows.innerHTML='';
+    for(const e of es){
+      const r=e.record;const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="mono">${e.seq}</td><td class="mono">${hms(r.at_millis)}</td>
+        <td class="mono">${r.ja3||r.source_ip}</td>
+        <td><span class="cls c-${r.attack_class}">${r.attack_class.replace(/_/g,' ')}</span></td>
+        <td>${r.rejection_reason}</td>`;
+      rows.appendChild(tr);
+    }
+  }catch(e){/* keep last view */}
+}
+tick(); setInterval(tick, 2000);
+</script>
+</body>
+</html>
