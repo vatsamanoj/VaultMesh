@@ -18,6 +18,7 @@ vault-app = { workspace = true }
 vault-proto = { workspace = true }
 adapter-blob-fs = { workspace = true }
 adapter-reed-solomon = { workspace = true }
+adapter-peer-http = { workspace = true }
 adapter-crypto = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }

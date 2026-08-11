@@ -2,11 +2,23 @@
 
 use crate::guard::authorize;
 use std::sync::Arc;
-use vault_domain::{BlobId, CapabilityToken, DomainError, Manifest, NamespaceId, Operation, Shard};
+use vault_domain::{
+    BlobId, CapabilityToken, DomainError, Manifest, NamespaceId, Operation, PlacementPolicy, Shard,
+    ShardLocation,
+};
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
-    PortError, PortResult, ShardRef,
+    PortError, PortResult, ShardRef, ShardTransport,
 };
+
+/// Peer-mesh configuration (P2). The anchor always holds the full shard set;
+/// peers are best-effort accelerators.
+#[derive(Clone, Default)]
+struct Mesh {
+    transport: Option<Arc<dyn ShardTransport>>,
+    peers: Vec<String>,
+    placement: PlacementPolicy,
+}
 
 pub struct PutBackup {
     metadata: Arc<dyn MetadataStore>,
@@ -16,6 +28,7 @@ pub struct PutBackup {
     verifier: Arc<dyn AuthVerifier>,
     ids: Arc<dyn IdSource>,
     clock: Arc<dyn Clock>,
+    mesh: Mesh,
 }
 
 impl PutBackup {
@@ -37,7 +50,24 @@ impl PutBackup {
             verifier,
             ids,
             clock,
+            mesh: Mesh::default(),
         }
+    }
+
+    /// Enable P2 peer replication: after the authoritative anchor write, push
+    /// each shard to `peers` for locality. Failures are ignored (accelerator).
+    pub fn with_mesh(
+        mut self,
+        transport: Arc<dyn ShardTransport>,
+        peers: Vec<String>,
+        placement: PlacementPolicy,
+    ) -> Self {
+        self.mesh = Mesh {
+            transport: Some(transport),
+            peers,
+            placement,
+        };
+        self
     }
 
     /// The `ciphertext` is opaque to VaultMesh — encrypted by the app already.
@@ -57,7 +87,7 @@ impl PutBackup {
         )
         .await?;
 
-        // Quota (L: abuse/DoS containment) from the app's Contract.
+        // Quota (abuse/DoS containment) from the app's Contract.
         let contract = self
             .metadata
             .get_contract(&app)
@@ -78,9 +108,15 @@ impl PutBackup {
         for (index, bytes) in shards.iter().enumerate() {
             let index = index as u16;
             let at = ShardRef::new(namespace.clone(), blob_id.clone(), index);
+
+            // Authoritative write — the anchor always holds the full set.
             self.anchor.put_shard(&at, bytes).await?;
-            let digest = self.crypto.sha256_hex(bytes);
-            shard_meta.push(Shard::new(index, digest, bytes.len() as u32));
+
+            let mut meta = Shard::new(index, self.crypto.sha256_hex(bytes), bytes.len() as u32);
+            for peer in self.replicate(&at, bytes).await {
+                meta.locations.push(ShardLocation::Peer(peer));
+            }
+            shard_meta.push(meta);
         }
 
         let manifest = Manifest::new(
@@ -93,5 +129,23 @@ impl PutBackup {
         );
         self.metadata.put_manifest(&manifest).await?;
         Ok(blob_id)
+    }
+
+    /// Best-effort replicate a shard to configured peers; returns the peers that
+    /// accepted it (so they can be recorded as `ShardLocation::Peer`).
+    async fn replicate(&self, at: &ShardRef, bytes: &[u8]) -> Vec<String> {
+        let mut placed = Vec::new();
+        if !self.mesh.placement.prefer_peers {
+            return placed;
+        }
+        let Some(transport) = &self.mesh.transport else {
+            return placed;
+        };
+        for peer in &self.mesh.peers {
+            if transport.send_shard(peer, at, bytes).await.is_ok() {
+                placed.push(peer.clone());
+            }
+        }
+        placed
     }
 }

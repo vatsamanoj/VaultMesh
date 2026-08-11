@@ -64,6 +64,7 @@ Crate layout (a Cargo workspace of small, single-responsibility crates):
 | `adapter-memstore` | `MetadataStore` — in-memory (P0/dev). |
 | `adapter-erasure` | `ErasureCoder` — P0 passthrough (`k = 1`). |
 | `adapter-reed-solomon` | `ErasureCoder` — P1 Reed-Solomon, any `k` of `n`. |
+| `adapter-peer-http` | `ShardTransport` — P2 peer-mesh shard replication. |
 | `vault-client` | Thin SDK apps link against (client-side encryption + sidecar calls). |
 | `coordinator` (bin) | axum control plane: registry, capability tokens, manifests. |
 | `node-agent` (bin) | Per-machine sidecar: localhost API, erasure, store/serve shards. |
@@ -72,7 +73,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
 [`docs/CONTRACT.md`](docs/CONTRACT.md), [`docs/SECURITY.md`](docs/SECURITY.md),
 and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Status — P0 + P1 (central anchor + erasure coding)
+## Status — P0 + P1 + P2 (anchor + erasure + peer mesh)
 
 The workspace implements the **P0** slice: the Contract types, the pure domain
 core, the ports, the use-cases (`RegisterApp`, `IssueCapability`, `PutBackup`,
@@ -84,7 +85,12 @@ it together.
 **P1** adds **Reed-Solomon erasure coding** (`adapter-reed-solomon`, default
 4-of-6) with per-shard SHA-256 verify-on-restore: any `k` of `n` shards
 reconstruct a blob, and a corrupted shard is treated as an erasure so restore
-survives it within the parity budget. No peer mesh yet — that is P2.
+survives it within the parity budget.
+
+**P2** adds the **peer mesh** (`adapter-peer-http`): node-agents replicate and
+serve shards for each other, restores prefer nearby peers, and the RustFS anchor
+is always the authoritative fallback — so peers going offline never blocks a
+restore. Configure peers with `VAULT_PEERS`.
 
 **This alone is reliable, app-agnostic, off-site backup/restore.**
 

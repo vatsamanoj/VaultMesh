@@ -46,12 +46,30 @@ budget still restores byte-identical; a corrupted-plus-missing pair within
 budget is reconstructed; losing more than the parity budget fails with
 `Unavailable`.
 
-## P2 — Peer mesh acceleration + locality
+## P2 — Peer mesh acceleration + locality  ← implemented
 
-Node-agents store/serve shards for peers; download prefers peers, anchor is
-fallback. Placement policy uses an app-supplied **opaque** locality hint —
-VaultMesh still knows nothing about tenants. Adds `adapter-quic`
-(`ShardTransport` + `NatBroker`).
+Node-agents store/serve shards for peers; download prefers peers, the anchor is
+the fallback. Placement policy uses an app-supplied **opaque** locality hint —
+VaultMesh still knows nothing about tenants.
+
+Implemented here:
+- `adapter-peer-http` (`PeerHttpTransport`) implements the `ShardTransport`
+  port over HTTP; each node-agent exposes `/v1/peer/shards/{ns}/{blob}/{index}`
+  (PUT to store a replica, GET to serve one) backed by its local anchor.
+- `PutBackup` replicates each shard to configured peers after the authoritative
+  anchor write, recording `ShardLocation::Peer` in the manifest. `GetBackup`
+  prefers a shard's peer replicas, then falls back to the anchor — verifying
+  SHA-256 from whichever source serves it.
+- The anchor **always** holds the full set, so peers are a pure accelerator:
+  peers offline never blocks a restore. Configure peers via `VAULT_PEERS`.
+
+Drills (`crates/vault-app/tests/mesh.rs`): a put replicates every shard to the
+peer and a restore is served from the peer even with the anchor copy deleted;
+with peers offline the restore falls back to the anchor. A two-node smoke test
+confirms real HTTP replication (both nodes hold all shards).
+
+`NatBroker` (hole-punch / coordinator relay) remains declared; the outbound-only
+HTTP transport needs no inbound port in dev, and direct QUIC transport is P4.
 
 ## P3 — Repair loop + health + quotas/billing + admin dashboard
 

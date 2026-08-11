@@ -49,7 +49,7 @@ swappable **adapters**. Every file targets **≤500 lines**, enforced in CI.
 | `ErasureCoder` | Shard / reconstruct | `adapter-reed-solomon` (P1, any k-of-n) · `adapter-erasure` (passthrough) | — |
 | `CapabilitySigner` / `AuthVerifier` | Sign/verify capability tokens | `adapter-crypto` (ed25519) | KMS/HSM signer |
 | `Clock` | Testable time (TTL, nonce expiry) | system clock | — |
-| `ShardTransport` | Peer mesh shard put/get | *(P2)* | `adapter-quic` |
+| `ShardTransport` | Peer mesh shard put/get | `adapter-peer-http` (P2) | `adapter-quic` (P4) |
 | `NameResolver` | stable name → current IP (dynamic→static) | *(P3)* | `adapter-ddns` |
 | `NatBroker` | hole-punch / coordinator relay | *(P2)* | `adapter-quic` |
 | `CertAuthority` | issue/rotate/revoke certs | *(P3)* | `adapter-rcgen-ca` |

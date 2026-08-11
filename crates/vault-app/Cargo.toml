@@ -14,6 +14,7 @@ async-trait = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+async-trait = { workspace = true }
 adapter-memstore = { workspace = true }
 adapter-blob-fs = { workspace = true }
 adapter-crypto = { workspace = true }

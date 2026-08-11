@@ -10,6 +10,7 @@ members = [
     "crates/adapter-memstore",
     "crates/adapter-erasure",
     "crates/adapter-reed-solomon",
+    "crates/adapter-peer-http",
     "crates/vault-client",
     "bins/coordinator",
     "bins/node-agent",
@@ -63,6 +64,7 @@ adapter-blob-fs = { path = "crates/adapter-blob-fs" }
 adapter-memstore = { path = "crates/adapter-memstore" }
 adapter-erasure = { path = "crates/adapter-erasure" }
 adapter-reed-solomon = { path = "crates/adapter-reed-solomon" }
+adapter-peer-http = { path = "crates/adapter-peer-http" }
 vault-client = { path = "crates/vault-client" }
 
 [profile.release]

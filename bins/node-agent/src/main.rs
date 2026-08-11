@@ -6,6 +6,8 @@
 //! - `VAULT_NODE_ADDR`        bind address (default `127.0.0.1:8790`)
 //! - `VAULT_COORDINATOR_URL`  control plane (default `http://127.0.0.1:8787`)
 //! - `VAULT_ANCHOR_ROOT`      local shard directory (default `./.vaultmesh/anchor`)
+//! - `VAULT_PEERS`            comma-separated peer base URLs for the P2 mesh,
+//!   e.g. `http://10.0.0.4:8790,http://10.0.0.5:8790`
 
 mod http;
 mod remote_meta;
@@ -14,16 +16,19 @@ mod state;
 
 use adapter_blob_fs::FsBlobAnchor;
 use adapter_crypto::{AesGcmCryptographer, Ed25519Verifier, RandomIdSource, SystemClock};
+use adapter_peer_http::PeerHttpTransport;
 use adapter_reed_solomon::ReedSolomonCoder;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
 use remote_meta::RemoteMetadataStore;
 use state::AppState;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use vault_app::{DeleteBackup, GetBackup, ListBackups, PutBackup};
+use vault_domain::PlacementPolicy;
 use vault_ports::{
     AuthVerifier, BlobAnchor, Clock, Cryptographer, ErasureCoder, IdSource, MetadataStore,
+    ShardTransport,
 };
 use vault_proto::CoordinatorKey;
 
@@ -46,6 +51,11 @@ fn router(state: AppState) -> Router {
         .route("/v1/backups/get", post(routes::get_backup))
         .route("/v1/backups/list", post(routes::list_backups))
         .route("/v1/backups/delete", post(routes::delete_backup))
+        // P2 peer-mesh shard replicas (private overlay).
+        .route(
+            "/v1/peer/shards/:ns/:blob/:index",
+            put(routes::peer_put_shard).get(routes::peer_get_shard),
+        )
         .with_state(state)
 }
 
@@ -64,6 +74,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("VAULT_COORDINATOR_URL").unwrap_or_else(|_| "http://127.0.0.1:8787".into());
     let anchor_root =
         std::env::var("VAULT_ANCHOR_ROOT").unwrap_or_else(|_| "./.vaultmesh/anchor".into());
+    let peers: Vec<String> = std::env::var("VAULT_PEERS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
     // Adapters behind their ports.
     let metadata: Arc<dyn MetadataStore> = Arc::new(RemoteMetadataStore::new(coordinator.clone()));
@@ -73,26 +89,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let verifier: Arc<dyn AuthVerifier> = Arc::new(fetch_verifier(&coordinator).await?);
     let ids: Arc<dyn IdSource> = Arc::new(RandomIdSource::new());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::new());
+    let transport: Arc<dyn ShardTransport> = Arc::new(PeerHttpTransport::new());
+
+    // Peers are accelerators only; the anchor always holds the full shard set.
+    let placement = PlacementPolicy {
+        locality_hint: None,
+        prefer_peers: !peers.is_empty(),
+    };
+
+    let put = PutBackup::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+        verifier.clone(),
+        ids.clone(),
+        clock.clone(),
+    )
+    .with_mesh(transport.clone(), peers.clone(), placement);
+    let get = GetBackup::new(
+        metadata.clone(),
+        anchor.clone(),
+        erasure.clone(),
+        crypto.clone(),
+        verifier.clone(),
+        clock.clone(),
+    )
+    .with_mesh(transport.clone());
 
     // Data-plane use-cases.
     let state = AppState {
-        put: Arc::new(PutBackup::new(
-            metadata.clone(),
-            anchor.clone(),
-            erasure.clone(),
-            crypto.clone(),
-            verifier.clone(),
-            ids.clone(),
-            clock.clone(),
-        )),
-        get: Arc::new(GetBackup::new(
-            metadata.clone(),
-            anchor.clone(),
-            erasure.clone(),
-            crypto.clone(),
-            verifier.clone(),
-            clock.clone(),
-        )),
+        put: Arc::new(put),
+        get: Arc::new(get),
         list: Arc::new(ListBackups::new(
             metadata.clone(),
             verifier.clone(),
@@ -104,10 +132,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             verifier.clone(),
             clock.clone(),
         )),
+        anchor: anchor.clone(),
     };
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!(%addr, %coordinator, "VaultMesh node-agent listening");
+    tracing::info!(%addr, %coordinator, peers = peers.len(), "VaultMesh node-agent listening");
     axum::serve(listener, router(state)).await?;
     Ok(())
 }

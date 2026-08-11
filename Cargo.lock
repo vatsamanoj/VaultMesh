@@ -47,6 +47,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "adapter-peer-http"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "vault-domain",
+ "vault-ports",
+]
+
+[[package]]
 name = "adapter-reed-solomon"
 version = "0.1.0"
 dependencies = [
@@ -920,6 +930,7 @@ version = "0.1.0"
 dependencies = [
  "adapter-blob-fs",
  "adapter-crypto",
+ "adapter-peer-http",
  "adapter-reed-solomon",
  "async-trait",
  "axum",

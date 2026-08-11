@@ -2,16 +2,50 @@
 
 use crate::http::{bad_request, err, ApiError};
 use crate::state::AppState;
-use axum::extract::State;
+use axum::body::Bytes;
+use axum::extract::{Path, State};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use vault_domain::{BlobId, NamespaceId};
+use vault_ports::ShardRef;
 use vault_proto::{
     DeleteRequest, GetRequest, ListRequest, ListResponse, PutRequest, PutResponse, RestoredBlob,
 };
 
 pub async fn health() -> &'static str {
     "ok"
+}
+
+// --- P2 peer-mesh endpoints: store/serve shard replicas for peers ---
+// These sit on the private overlay. A shard is opaque, fixed-size erasure-coded
+// ciphertext, so a peer holding it learns nothing (see docs/SECURITY.md).
+
+fn shard_ref(ns: String, blob: String, index: u16) -> ShardRef {
+    ShardRef::new(NamespaceId::new(ns), BlobId::new(blob), index)
+}
+
+pub async fn peer_put_shard(
+    State(st): State<AppState>,
+    Path((ns, blob, index)): Path<(String, String, u16)>,
+    body: Bytes,
+) -> Result<(), ApiError> {
+    st.anchor
+        .put_shard(&shard_ref(ns, blob, index), &body)
+        .await
+        .map_err(err)
+}
+
+pub async fn peer_get_shard(
+    State(st): State<AppState>,
+    Path((ns, blob, index)): Path<(String, String, u16)>,
+) -> Result<Bytes, ApiError> {
+    let bytes = st
+        .anchor
+        .get_shard(&shard_ref(ns, blob, index))
+        .await
+        .map_err(err)?;
+    Ok(Bytes::from(bytes))
 }
 
 pub async fn put_backup(
