@@ -25,6 +25,8 @@
   .pill{font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--muted)}
   .pill b{color:var(--ink);font-weight:600}
   .pill.ok b{color:var(--ok)} .pill.bad b{color:var(--bad)}
+  a.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 11px}
+  a.back:hover{color:var(--ink);background:var(--chip)}
   main{max-width:1040px;margin:0 auto;padding:22px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
   .card h2{margin:0 0 3px;font-size:15px}
@@ -45,6 +47,7 @@
 </head>
 <body>
 <header>
+  <a class="back" href="/" title="Back to the chat console">← Console</a>
   <div class="logo">🛡</div>
   <h1>VaultMesh <span>· Active Perimeter</span></h1>
   <div class="pills">
