@@ -1,6 +1,8 @@
 //! Use-case: self-healing repair. Detect shards that are missing or corrupt on
 //! the anchor and rebuild them from the surviving shards via erasure coding —
-//! the "repair when nodes go dark" loop. This is an internal maintenance
+//! the "repair when nodes go dark" loop. When too few shards survive locally to
+//! reconstruct, it borrows the missing ones from their peer replicas first
+//! (mesh durability), then heals the anchor. This is an internal maintenance
 //! operation (no capability token); a scheduler sweeps blobs periodically.
 
 use serde::{Deserialize, Serialize};
@@ -48,10 +50,53 @@ impl RepairShards {
         }
     }
 
-    /// Also re-replicate repaired shards to their recorded peers.
+    /// Enable the mesh: pull missing shards from peer replicas when too few
+    /// survive locally to reconstruct, and re-replicate repaired shards back.
     pub fn with_mesh(mut self, transport: Arc<dyn ShardTransport>) -> Self {
         self.transport = Some(transport);
         self
+    }
+
+    /// When fewer than `k` shards survive locally, try to borrow the missing
+    /// ones from their recorded peer replicas (integrity-checked) so the blob
+    /// becomes reconstructable again. Returns how many slots were filled in.
+    async fn backfill_from_peers(
+        &self,
+        namespace: &NamespaceId,
+        blob_id: &BlobId,
+        manifest: &vault_domain::Manifest,
+        collected: &mut [Option<Vec<u8>>],
+        bad: &[u16],
+    ) -> usize {
+        let k = manifest.erasure.k as usize;
+        let mut available = collected.iter().filter(|s| s.is_some()).count();
+        let Some(transport) = &self.transport else {
+            return 0;
+        };
+        let mut filled = 0;
+        for shard in &manifest.shards {
+            if available >= k {
+                break;
+            }
+            if !bad.contains(&shard.index) {
+                continue;
+            }
+            let at = ShardRef::new(namespace.clone(), blob_id.clone(), shard.index);
+            for location in &shard.locations {
+                let ShardLocation::Peer(peer) = location else {
+                    continue;
+                };
+                if let Ok(bytes) = transport.fetch_shard(peer, &at).await {
+                    if self.crypto.sha256_hex(&bytes) == shard.sha256 {
+                        collected[shard.index as usize] = Some(bytes);
+                        available += 1;
+                        filled += 1;
+                        break;
+                    }
+                }
+            }
+        }
+        filled
     }
 
     /// Inspect and repair one blob's shards on the anchor.
@@ -96,8 +141,13 @@ impl RepairShards {
             });
         }
 
-        // Need at least k valid shards to reconstruct.
-        let available = healthy;
+        // Need at least k valid shards to reconstruct. If too few survive
+        // locally, borrow the missing ones from peer replicas (mesh durability).
+        if !manifest.is_reconstructable(healthy) {
+            self.backfill_from_peers(namespace, blob_id, &manifest, &mut collected, &bad)
+                .await;
+        }
+        let available = collected.iter().filter(|s| s.is_some()).count();
         if !manifest.is_reconstructable(available) {
             return Ok(RepairReport {
                 blob_id: blob_id.clone(),

@@ -13,7 +13,9 @@ use adapter_memstore::MemoryMetadataStore;
 use adapter_reed_solomon::ReedSolomonCoder;
 use async_trait::async_trait;
 use tempfile::TempDir;
-use vault_app::{CreateNamespace, GetBackup, IssueCapability, PutBackup, RegisterApp};
+use vault_app::{
+    CreateNamespace, GetBackup, IssueCapability, PutBackup, RegisterApp, RepairShards,
+};
 use vault_domain::{
     AppId, ErasureParams, NamespaceId, Operation, PlacementPolicy, Quota, RetentionPolicy,
 };
@@ -235,4 +237,50 @@ async fn anchor_is_the_fallback_when_peers_offline() {
     let get_tok = c.token(&app, &ns, Operation::Get).await;
     let restored = c.get.execute(&ns, &get_tok, &blob).await.unwrap();
     assert_eq!(c.open(&ns, &restored), payload, "restored from the anchor");
+}
+
+/// When a node drops BELOW k surviving shards locally, repair borrows the
+/// missing ones from their peer replicas, reconstructs, and heals the anchor —
+/// so the node becomes independently restorable again.
+#[tokio::test]
+async fn repair_borrows_from_peer_when_below_k() {
+    let c = ctx();
+    let (app, ns) = c.onboard().await;
+    let payload = b"repair heals from peers when local drops below k".to_vec();
+    let ct = c.seal(&ns, &payload);
+
+    let put_tok = c.token(&app, &ns, Operation::Put).await;
+    let blob = c.put.execute(&ns, &put_tok, &ct).await.unwrap();
+    assert_eq!(c.peer.stored(), 6, "all 6 shards replicated to the peer");
+
+    // Destroy 3 of 6 local shards — only 3 survive locally, below k = 4.
+    let dir = c.root.join(ns.as_str()).join(blob.as_str());
+    for i in [0u16, 1, 2] {
+        std::fs::remove_file(dir.join(format!("{i:05}.shard"))).unwrap();
+    }
+
+    let anchor: Arc<dyn BlobAnchor> = Arc::new(FsBlobAnchor::new(&c.root));
+    let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
+    let transport: Arc<dyn ShardTransport> = c.peer.clone();
+    let repair = RepairShards::new(c.metadata.clone(), anchor, erasure, c.crypto.clone())
+        .with_mesh(transport);
+
+    let report = repair.execute(&ns, &blob).await.unwrap();
+    assert!(
+        !report.unrepairable,
+        "peer replicas make it repairable again"
+    );
+    assert_eq!(report.repaired, 3, "all 3 missing shards rebuilt locally");
+    assert_eq!(report.healthy, 6);
+    assert!(c.peer.fetches() > 0, "repair fetched a shard from the peer");
+
+    // The node is independent now: with peers offline, the anchor restores alone.
+    c.peer.set_online(false);
+    let get_tok = c.token(&app, &ns, Operation::Get).await;
+    let restored = c.get.execute(&ns, &get_tok, &blob).await.unwrap();
+    assert_eq!(
+        c.open(&ns, &restored),
+        payload,
+        "healed anchor restores alone"
+    );
 }

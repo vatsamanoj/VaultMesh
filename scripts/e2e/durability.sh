@@ -71,5 +71,14 @@ echo "   catastrophic loss on A: deleted 3 of 6 → A has only $(shards "$DIR_A"
 if restore_ok; then echo "   restore: OK, byte-identical (missing shards fetched from peer B)"; else echo "   restore: FAILED"; FAIL=1; fi
 
 echo
+echo "== PART 3: repair heals a below-k node by borrowing from peers =="
+echo "   repair report: $(repair)"
+echo "   node A anchor after repair: $(shards "$DIR_A")/6"
+[ "$(shards "$DIR_A")" = "6" ] || { echo "   !! expected 6 after peer-assisted repair"; FAIL=1; }
+kill $BPID 2>/dev/null || true; sleep 1
+echo "   (peer B killed again — node A must now stand alone)"
+if restore_ok; then echo "   restore from A alone: OK, byte-identical (node fully healed)"; else echo "   restore from A alone: FAILED"; FAIL=1; fi
+
+echo
 if [ "$FAIL" = "0" ]; then echo "DURABILITY DRILL PASSED — data survived shard loss and node-down, byte-identical throughout."; else echo "DURABILITY DRILL FAILED"; fi
 exit $FAIL
