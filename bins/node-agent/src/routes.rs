@@ -63,6 +63,11 @@ pub async fn repair(
     Ok(Json(report))
 }
 
+/// Maintenance plane: live status of the background repair sweep.
+pub async fn sweep_status(State(st): State<AppState>) -> Json<crate::state::SweepStatus> {
+    Json(st.sweep.lock().expect("sweep status lock").clone())
+}
+
 /// Maintenance plane: prune old versions of one opaque object group.
 pub async fn prune(
     State(st): State<AppState>,

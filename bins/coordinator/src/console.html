@@ -83,6 +83,10 @@
   @media (prefers-color-scheme:dark){.shardtag{background:rgba(255,255,255,.08)}}
   .toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(16px);background:var(--ink);color:var(--panel);padding:10px 20px;border-radius:22px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:.25s;z-index:70}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .sweepbar{border-top:1px solid var(--line);padding:9px 16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;background:var(--side)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#8a94a3}
+  .dot.on{background:var(--ok,#1a7f52)} .dot.off{background:#c2c8d0}
+  .sweepbar b{color:var(--ink);font-weight:600}
   .menu{position:fixed;top:56px;left:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:6px;z-index:65;display:none;min-width:220px}
   .menu.show{display:block}
   .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--ink);font:inherit;font-size:14px;padding:10px 12px;border-radius:7px;cursor:pointer}
@@ -152,6 +156,7 @@
     </div>
     <div class="searchwrap"><input id="search" placeholder="Search or start a new chat" /></div>
     <div class="chatlist" id="chatlist"></div>
+    <div class="sweepbar" id="sweepbar" title="Background repair sweep (node-agent)"></div>
   </div>
 
   <!-- welcome (desktop, nothing selected) -->
@@ -479,6 +484,19 @@ async function repairVault(ns){
 $('#chMenu').onclick=()=>{if(ACTIVE)repairVault(ACTIVE);};
 $('#backBtn').onclick=()=>{$('#app').classList.remove('show-chat');ACTIVE=null;renderList();};
 $('#search').oninput=renderList;
+
+/* ---------- background repair-sweep indicator (polls the node-agent) ---------- */
+const ago=ms=>{const s=Math.max(0,Math.round((Date.now()-ms)/1000));return s<60?s+'s ago':Math.round(s/60)+'m ago';};
+async function pollSweep(){
+  const el=$('#sweepbar');
+  try{
+    const s=await api(nodeUrl()+'/v1/maintenance/status');
+    if(!s.enabled){el.innerHTML='<span class="dot off"></span>Auto-repair off';return;}
+    const when=s.last_run_ms?('swept '+ago(s.last_run_ms)):'first sweep pending';
+    el.innerHTML=`<span class="dot on"></span>Auto-repair · every ${s.interval_secs}s · ${when} · <b>${s.total_repaired}</b> shard(s) healed`;
+  }catch(e){el.innerHTML='<span class="dot off"></span>node-agent offline';}
+}
+pollSweep(); setInterval(pollSweep, 4000);
 
 loadChats();
 </script>

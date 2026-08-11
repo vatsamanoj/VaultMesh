@@ -102,6 +102,8 @@ async fn fetch_verifier(
 fn spawn_repair_sweep(
     metadata: Arc<dyn MetadataStore>,
     repair: Arc<RepairShards>,
+    clock: Arc<dyn Clock>,
+    sweep: state::SweepHandle,
     interval_secs: u64,
 ) {
     tokio::spawn(async move {
@@ -115,21 +117,36 @@ fn spawn_repair_sweep(
                     continue;
                 }
             };
+            let (mut checked, mut repaired, mut unrepairable) = (0u64, 0u64, 0u64);
             for ns in namespaces {
                 let blobs = metadata.list_blobs(&ns).await.unwrap_or_default();
                 for blob in blobs {
+                    checked += 1;
                     match repair.execute(&ns, &blob).await {
-                        Ok(r) if r.repaired > 0 || r.unrepairable => {
-                            tracing::info!(
-                                namespace = %ns, blob = %blob,
-                                repaired = r.repaired, unrepairable = r.unrepairable,
-                                "repair sweep"
-                            );
+                        Ok(r) => {
+                            repaired += r.repaired as u64;
+                            if r.unrepairable {
+                                unrepairable += 1;
+                            }
+                            if r.repaired > 0 || r.unrepairable {
+                                tracing::info!(
+                                    namespace = %ns, blob = %blob,
+                                    repaired = r.repaired, unrepairable = r.unrepairable,
+                                    "repair sweep"
+                                );
+                            }
                         }
-                        Ok(_) => {}
                         Err(e) => tracing::warn!(blob = %blob, error = %e, "repair failed"),
                     }
                 }
+            }
+            if let Ok(mut s) = sweep.lock() {
+                s.sweeps += 1;
+                s.last_run_ms = clock.now().as_millis();
+                s.last_checked = checked;
+                s.last_repaired = repaired;
+                s.last_unrepairable = unrepairable;
+                s.total_repaired += repaired;
             }
         }
     });
@@ -194,6 +211,7 @@ fn router(state: AppState) -> Router {
         // Maintenance plane: on-demand self-healing repair + version pruning.
         .route("/v1/maintenance/repair", post(routes::repair))
         .route("/v1/maintenance/prune", post(routes::prune))
+        .route("/v1/maintenance/status", get(routes::sweep_status))
         // Let a browser chat client reach the data plane cross-origin.
         .layer(axum::middleware::from_fn(cors::permissive))
         .with_state(state)
@@ -285,6 +303,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .with_mesh(transport.clone());
 
+    // Background repair-sweep status handle (surfaced at /v1/maintenance/status).
+    let sweep_interval = std::env::var("VAULT_REPAIR_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|s| *s > 0);
+    let sweep: state::SweepHandle = Arc::new(std::sync::Mutex::new(state::SweepStatus {
+        enabled: sweep_interval.is_some(),
+        interval_secs: sweep_interval.unwrap_or(0),
+        ..Default::default()
+    }));
+
     // Data-plane + maintenance use-cases.
     let state = AppState {
         put: Arc::new(put),
@@ -307,15 +336,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             clock.clone(),
         )),
         anchor: anchor.clone(),
+        sweep: sweep.clone(),
     };
 
     // Optional background repair sweep (VAULT_REPAIR_SECS > 0 enables it).
-    if let Some(interval) = std::env::var("VAULT_REPAIR_SECS")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .filter(|s| *s > 0)
-    {
-        spawn_repair_sweep(metadata.clone(), state.repair.clone(), interval);
+    if let Some(interval) = sweep_interval {
+        spawn_repair_sweep(
+            metadata.clone(),
+            state.repair.clone(),
+            clock.clone(),
+            sweep.clone(),
+            interval,
+        );
     }
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
