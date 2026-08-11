@@ -4,6 +4,7 @@
 //! Bind address is `VAULT_COORDINATOR_ADDR` (default `127.0.0.1:8787`).
 
 mod admin;
+mod console;
 mod control;
 mod http;
 mod meta;
@@ -20,6 +21,9 @@ use std::sync::Arc;
 
 fn router(state: AppState) -> Router {
     Router::new()
+        // operator console (admin plane — bind to overlay/localhost)
+        .route("/", get(console::console))
+        .route("/v1/admin/enroll", post(console::enroll))
         // control plane
         .route("/health", get(control::health))
         .route("/v1/protocol", get(control::protocol))

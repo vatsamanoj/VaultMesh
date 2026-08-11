@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VaultMesh Operator Console</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#12161c; --muted:#5b6675;
+    --line:#e4e8ee; --brand:#2b6ef2; --brand-ink:#ffffff;
+    --ok:#1a7f52; --warn:#b4531a; --bad:#b3261e; --chip:#eef2f8;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9aa7b4;
+    --line:#273040; --brand:#4d8bff; --chip:#1c2330;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.45}
+  header{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),#8a4dff);flex:0 0 auto}
+  h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+  .pills{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--muted)}
+  .pill b{color:var(--ink);font-weight:600}
+  .banner{display:none;margin:0;padding:9px 22px;font-size:13px;background:#fff6e6;color:#8a5b12;border-bottom:1px solid var(--line)}
+  @media (prefers-color-scheme:dark){.banner{background:#2a2113;color:#e7c37a}}
+  main{max-width:1040px;margin:0 auto;padding:22px}
+  nav{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+  nav button{font:inherit;font-size:14px;padding:8px 15px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer}
+  nav button.active{background:var(--brand);color:var(--brand-ink);border-color:var(--brand);font-weight:600}
+  section{display:none} section.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:15px}
+  .card p.sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+  input[type=text]{width:100%;max-width:340px;font:inherit;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+  .btn{font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border-radius:9px;border:0;background:var(--brand);color:var(--brand-ink);cursor:pointer;margin-top:12px}
+  .btn.ghost{background:var(--chip);color:var(--ink);border:1px solid var(--line);margin:0}
+  .btn:disabled{opacity:.5;cursor:progress}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,code{font-family:var(--mono);font-size:12.5px}
+  .empty{color:var(--muted);font-size:13px;padding:14px 2px}
+  .result{border:1px solid var(--ok);border-radius:12px;padding:16px;margin-top:16px;display:none}
+  .result.show{display:block}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;font-size:13px;margin-bottom:14px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .files a{margin-right:10px}
+  .dl{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:12px;overflow:auto;font-family:var(--mono);font-size:12px;margin:0}
+  select{font:inherit;padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:14px}
+  .tag{font-family:var(--mono);font-size:12px;background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div>
+  <h1>VaultMesh · Operator Console</h1>
+  <div class="pills" id="pills">
+    <span class="pill">protocol <b id="p-proto">–</b></span>
+    <span class="pill">namespaces <b id="p-ns">–</b></span>
+    <span class="pill">intrusions <b id="p-intr">–</b></span>
+    <span class="pill">ledger <b id="p-chain">–</b></span>
+  </div>
+</header>
+<p class="banner" id="banner">Demo data — not connected to a live coordinator. Serve this page from a running coordinator to go live.</p>
+
+<main>
+  <nav>
+    <button data-tab="enroll" class="active">Enroll a node</button>
+    <button data-tab="nodes">Nodes &amp; namespaces</button>
+    <button data-tab="files">Files</button>
+  </nav>
+
+  <section id="tab-enroll" class="active">
+    <div class="card">
+      <h2>Enroll a node</h2>
+      <p class="sub">Registers an app, allocates a namespace, and issues a CA-signed mTLS client identity — the full bundle a new node-agent needs to join.</p>
+      <label for="label">Label (operator-only, e.g. "alice-laptop")</label>
+      <input type="text" id="label" placeholder="node" />
+      <br/><button class="btn" id="enrollBtn">Issue identity &amp; namespace</button>
+      <div class="result" id="enrollResult">
+        <div class="kv">
+          <div>app id</div><div class="mono" id="r-app"></div>
+          <div>namespace</div><div class="mono" id="r-ns"></div>
+        </div>
+        <div class="dl">
+          <button class="btn ghost" data-dl="client.pem" id="dl-cert">⬇ client.pem</button>
+          <button class="btn ghost" data-dl="client.key" id="dl-key">⬇ client.key</button>
+          <button class="btn ghost" data-dl="ca-root.pem" id="dl-ca">⬇ ca-root.pem</button>
+        </div>
+        <label>Start the remote node-agent with:</label>
+        <pre id="r-cmd"></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-nodes">
+    <div class="card">
+      <h2>Namespaces</h2>
+      <p class="sub">Each enrolled node writes into its own opaque namespace. The coordinator never sees tenant identities — only these ids and byte/object counts.</p>
+      <table><thead><tr><th>Namespace</th><th>Objects</th><th>Bytes stored</th></tr></thead>
+      <tbody id="nsRows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <section id="tab-files">
+    <div class="card">
+      <h2>Uploaded files</h2>
+      <p class="sub">Backups in a namespace. Sizes are ciphertext (client-side encrypted); the coordinator holds only manifests of shard references — never plaintext or names.</p>
+      <label for="nsPick">Namespace</label>
+      <select id="nsPick"></select>
+      <table><thead><tr><th>Blob id</th><th>Ciphertext</th><th>Shards</th><th>Created</th></tr></thead>
+      <tbody id="fileRows"><tr><td colspan="4" class="empty">Pick a namespace.</td></tr></tbody></table>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let LIVE = true, LAST = null;
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok) throw new Error(path + " → " + r.status);
+  return r.json();
+}
+const fmtBytes = n => { n=Number(n)||0; const u=["B","KB","MB","GB","TB"]; let i=0;
+  while(n>=1024&&i<u.length-1){n/=1024;i++;} return (i?n.toFixed(1):n)+" "+u[i]; };
+const fmtTime = ms => { const v=Number(ms)||0; return v? new Date(v).toISOString().replace("T"," ").slice(0,19)+"Z":"–"; };
+
+// ---- demo data (used when no live coordinator is reachable) ----
+const DEMO = {
+  status:{protocol_version:"vaultmesh/1",namespaces:2,intrusion_count:1,intrusion_chain_valid:true},
+  namespaces:["ns-7f3c2a19b0e84d51","ns-4e0d4082f0ed4000"],
+  usage:{"ns-7f3c2a19b0e84d51":{bytes:200000,objects:1},"ns-4e0d4082f0ed4000":{bytes:1536000,objects:3}},
+  blobs:{"ns-7f3c2a19b0e84d51":["blob-334a37d6772d4c64"],
+         "ns-4e0d4082f0ed4000":["blob-9efb37632f764bb7","blob-1a2b3c4d5e6f7081","blob-aa11bb22cc33dd44"]},
+  manifest:id=>({blob_id:id,ciphertext_len:512000,created_at:1754939339000,
+    shards:[{},{},{},{},{},{}]})
+};
+
+// ---- header status ----
+async function loadStatus(){
+  try{
+    const s = await api("/v1/admin/status");
+    $("#p-proto").textContent=s.protocol_version;
+    $("#p-ns").textContent=s.namespaces;
+    $("#p-intr").textContent=s.intrusion_count;
+    $("#p-chain").textContent=s.intrusion_chain_valid?"valid ✓":"BROKEN";
+  }catch(e){ goDemo(); const s=DEMO.status;
+    $("#p-proto").textContent=s.protocol_version;$("#p-ns").textContent=s.namespaces;
+    $("#p-intr").textContent=s.intrusion_count;$("#p-chain").textContent="valid ✓"; }
+}
+function goDemo(){ if(!LIVE) return; LIVE=false; $("#banner").style.display="block"; }
+
+// ---- enroll ----
+$("#enrollBtn").addEventListener("click", async ()=>{
+  const btn=$("#enrollBtn"); btn.disabled=true;
+  const label=$("#label").value.trim()||"node";
+  try{
+    let res;
+    if(LIVE){ res = await api("/v1/admin/enroll",{method:"POST",
+      headers:{"content-type":"application/json"},body:JSON.stringify({label})}); }
+    else { res = demoEnroll(label); }
+    LAST=res;
+    $("#r-app").textContent=res.app_id;
+    $("#r-ns").textContent=res.namespace;
+    $("#r-cmd").textContent=
+`VAULT_COORDINATOR_URL=https://<coordinator>:8787 \\
+VAULT_CA_CERT=ca-root.pem \\
+VAULT_CLIENT_CERT=client.pem VAULT_CLIENT_KEY=client.key \\
+VAULT_ANCHOR=presigned \\
+  node-agent`;
+    $("#enrollResult").classList.add("show");
+    loadStatus(); loadNamespaces();
+  }catch(e){ alert("enroll failed: "+e.message); }
+  finally{ btn.disabled=false; }
+});
+function demoEnroll(label){ const rnd=()=>Math.random().toString(16).slice(2,18);
+  return {label,app_id:"app-"+rnd(),namespace:"ns-"+rnd(),
+    client_cert_pem:"-----BEGIN CERTIFICATE-----\n(demo)\n-----END CERTIFICATE-----\n",
+    client_key_pem:"-----BEGIN PRIVATE KEY-----\n(demo)\n-----END PRIVATE KEY-----\n",
+    ca_root_pem:"-----BEGIN CERTIFICATE-----\n(demo ca)\n-----END CERTIFICATE-----\n"}; }
+document.querySelectorAll("[data-dl]").forEach(b=>b.addEventListener("click",()=>{
+  if(!LAST) return; const map={"client.pem":LAST.client_cert_pem,
+    "client.key":LAST.client_key_pem,"ca-root.pem":LAST.ca_root_pem};
+  const name=b.dataset.dl, blob=new Blob([map[name]],{type:"application/x-pem-file"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}));
+
+// ---- namespaces ----
+async function loadNamespaces(){
+  let ids, usage={};
+  try{ ids = LIVE ? await api("/v1/meta/namespaces") : DEMO.namespaces; }
+  catch(e){ goDemo(); ids = DEMO.namespaces; }
+  const rows=$("#nsRows"), pick=$("#nsPick"); rows.innerHTML=""; pick.innerHTML="";
+  if(!ids.length){ rows.innerHTML='<tr><td colspan="3" class="empty">No namespaces yet — enroll a node.</td></tr>'; return; }
+  for(const ns of ids){
+    let u; try{ u = LIVE ? await api("/v1/meta/namespaces/"+ns+"/usage") : DEMO.usage[ns]||{bytes:0,objects:0}; }
+    catch(e){ u=DEMO.usage[ns]||{bytes:0,objects:0}; }
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono">${ns}</td><td>${u.objects}</td><td>${fmtBytes(u.bytes)}</td>`;
+    rows.appendChild(tr);
+    const o=document.createElement("option"); o.value=ns; o.textContent=ns; pick.appendChild(o);
+  }
+  if(pick.value) loadFiles(pick.value);
+}
+
+// ---- files ----
+async function loadFiles(ns){
+  const rows=$("#fileRows"); rows.innerHTML='<tr><td colspan="4" class="empty">Loading…</td></tr>';
+  let blobs;
+  try{ blobs = LIVE ? await api("/v1/meta/namespaces/"+ns+"/blobs") : (DEMO.blobs[ns]||[]); }
+  catch(e){ goDemo(); blobs = DEMO.blobs[ns]||[]; }
+  if(!blobs.length){ rows.innerHTML='<tr><td colspan="4" class="empty">No files in this namespace.</td></tr>'; return; }
+  rows.innerHTML="";
+  for(const b of blobs){
+    let m; try{ m = LIVE ? await api("/v1/meta/namespaces/"+ns+"/manifests/"+b) : DEMO.manifest(b); }
+    catch(e){ m = DEMO.manifest(b); }
+    const shards=(m&&m.shards)?m.shards.length:"–", len=m?m.ciphertext_len:0, ts=m?m.created_at:0;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono">${b}</td><td>${fmtBytes(len)}</td><td><span class="tag">${shards}</span></td><td class="mono">${fmtTime(ts)}</td>`;
+    rows.appendChild(tr);
+  }
+}
+$("#nsPick").addEventListener("change", e=>loadFiles(e.target.value));
+
+// ---- tabs ----
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll("section").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); $("#tab-"+b.dataset.tab).classList.add("active");
+  if(b.dataset.tab==="nodes"||b.dataset.tab==="files") loadNamespaces();
+}));
+
+// ---- boot ----
+loadStatus(); loadNamespaces();
+</script>
+</body>
+</html>

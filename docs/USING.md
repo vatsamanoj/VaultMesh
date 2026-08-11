@@ -179,6 +179,30 @@ rejected (`certificate required`); a **different-CA** client cert → rejected
 
 `VAULT_TLS_SANS` (default `localhost,127.0.0.1`) sets the server cert's names.
 
+## Operator console (browser UI)
+
+The coordinator serves a self-contained web console at `/` — no build step, no
+external assets. From a browser you can:
+
+- **Enroll a node** — one click registers an app, allocates a namespace, and
+  issues a CA-signed mTLS client identity; download `client.pem`/`client.key`/
+  `ca-root.pem` and copy the ready-to-run node-agent command.
+- **Nodes & namespaces** — see every opaque namespace with its object/byte counts.
+- **Files** — browse the backups in a namespace: blob id, ciphertext size, shard
+  count, and timestamp (never plaintext or filenames — those stay client-side).
+
+```sh
+coordinator                       # then open http://127.0.0.1:8787/
+```
+
+Enrollment is one endpoint too: `POST /v1/admin/enroll {"label":"alice-laptop"}`
+returns `{app_id, namespace, client_cert_pem, client_key_pem, ca_root_pem}`.
+
+The console is an **admin-plane** surface: serve it over localhost or the private
+overlay. Because a browser can't easily present a client cert, run the console
+plane in plain HTTP behind the overlay (or before enabling `VAULT_TLS_MODE=mtls`
+on a public bind) rather than exposing it publicly.
+
 ## Self-hosting on your own machine (public IP + router, no cloud)
 
 You do **not** need a cloud host or a "public HTTPS" certificate. VaultMesh's own
