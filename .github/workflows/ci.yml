@@ -53,7 +53,10 @@ jobs:
         run: |
           set -e
           manifest=crates/vault-domain/Cargo.toml
-          if grep -Eiq 'tokio|sqlx|reqwest|axum|aws|hyper|rustfs' "$manifest"; then
+          # Strip comments first — only declared dependencies should be checked,
+          # not the explanatory comment that names the forbidden crates.
+          if grep -v '^[[:space:]]*#' "$manifest" \
+               | grep -Eiq 'tokio|sqlx|reqwest|axum|aws|hyper|rustfs'; then
             echo "vault-domain must not depend on I/O crates" >&2
             exit 1
           fi
