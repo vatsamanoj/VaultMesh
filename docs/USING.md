@@ -123,6 +123,27 @@ at `s3://<bucket>/<namespace>/<blob>/<index>.shard`. Verified end-to-end: a real
 file backed up via `vaultfile.py` stored its six shards in the bucket (no
 plaintext in any of them) and restored byte-identical.
 
+- **`presigned`** — the node-agent holds **no** S3 credentials at all. For each
+  shard it asks the coordinator (which holds the creds) for a short-lived,
+  path-scoped **presigned URL**, then transfers the shard directly to the object
+  store. The S3 keys live only on the coordinator; the anchor is never reachable
+  without a coordinator-issued URL.
+
+```sh
+# coordinator holds the S3 creds and mints presigned URLs:
+VAULT_S3_ENDPOINT=http://rustfs-host:9000 VAULT_S3_BUCKET=vaultmesh \
+VAULT_S3_ACCESS_KEY=... VAULT_S3_SECRET_KEY=...  coordinator
+
+# node-agent holds NO S3 creds — just points at the coordinator:
+VAULT_ANCHOR=presigned VAULT_COORDINATOR_URL=http://coordinator:8787  node-agent
+```
+
+URLs are valid for a few minutes (long enough for one transfer). Delete-by-blob
+runs on the coordinator (it needs the creds) via `/v1/anchor/delete-blob`.
+Verified end-to-end against a live S3 server: with the node-agent holding no S3
+keys, a file's six shards were written through presigned URLs, restored
+byte-identical, and a delete cleared every shard from the bucket.
+
 ## mTLS (the L1 gate)
 
 The coordinator can require every caller to present a **client certificate
@@ -160,9 +181,6 @@ rejected (`certificate required`); a **different-CA** client cert → rejected
 
 ## Remaining hardening (this reference build)
 
-- Node-agents talk to RustFS directly; hardening to coordinator-issued,
-  path-scoped **presigned URLs** (so the anchor is never reachable by clients) is
-  a later step behind the same `BlobAnchor` port.
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
 
 The ports/adapters architecture is built so each of these is a drop-in swap.

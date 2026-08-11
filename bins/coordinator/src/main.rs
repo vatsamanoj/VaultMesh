@@ -8,6 +8,7 @@ mod control;
 mod http;
 mod meta;
 mod perimeter;
+mod presign;
 mod state;
 mod tls;
 
@@ -48,6 +49,9 @@ fn router(state: AppState) -> Router {
         .route("/v1/admin/status", get(admin::status))
         .route("/v1/admin/intrusions", get(admin::intrusions))
         .route("/v1/usage/:app", get(admin::usage))
+        // coordinator-issued anchor access (presigned URLs)
+        .route("/v1/anchor/presign", post(presign::presign))
+        .route("/v1/anchor/delete-blob", post(presign::delete_blob))
         // self-sovereign CA + naming (P3)
         .route("/v1/ca/root", get(admin::ca_root))
         .route("/v1/admin/ca/leaf", post(admin::ca_issue))

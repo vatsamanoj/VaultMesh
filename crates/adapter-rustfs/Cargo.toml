@@ -13,4 +13,5 @@ vault-ports = { workspace = true }
 async-trait = { workspace = true }
 object_store = { workspace = true }
 futures = { workspace = true }
+http = "1"
 tracing = { workspace = true }

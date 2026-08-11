@@ -5,7 +5,9 @@
 //! Env:
 //! - `VAULT_NODE_ADDR`        bind address (default `127.0.0.1:8790`)
 //! - `VAULT_COORDINATOR_URL`  control plane (default `http://127.0.0.1:8787`)
-//! - `VAULT_ANCHOR`           `fs` (default) or `rustfs`/`s3` for the object store.
+//! - `VAULT_ANCHOR`           `fs` (default), `rustfs`/`s3` for the object store,
+//!   or `presigned` — holds NO S3 creds and fetches per-shard presigned URLs
+//!   from the coordinator (the coordinator holds the credentials).
 //! - `VAULT_ANCHOR_ROOT`      local shard directory (fs anchor; default `./.vaultmesh/anchor`).
 //! - `VAULT_S3_*`             ENDPOINT/BUCKET/REGION/ACCESS_KEY/SECRET_KEY/ALLOW_HTTP for RustFS.
 //! - `VAULT_PEERS`            comma-separated peer addresses for the mesh. HTTP
@@ -17,6 +19,7 @@
 //!   the node-agent presents to (and trusts on) an mTLS coordinator.
 
 mod http;
+mod presigned_anchor;
 mod remote_meta;
 mod routes;
 mod state;
@@ -132,15 +135,28 @@ fn spawn_repair_sweep(
 }
 
 /// Select the anchor from `VAULT_ANCHOR`:
+/// - `presigned` → the coordinator-issued presigned-URL anchor, which holds NO
+///   S3 credentials (it asks the coordinator for a short-lived URL per shard);
 /// - `rustfs` / `s3` → the authoritative RustFS (S3-compatible) object store,
 ///   configured from `VAULT_S3_*` env;
 /// - anything else (default) → the local filesystem stand-in.
-fn build_anchor(anchor_root: &str) -> Result<Arc<dyn BlobAnchor>, Box<dyn std::error::Error>> {
+fn build_anchor(
+    anchor_root: &str,
+    coordinator: &str,
+    coord_client: &reqwest::Client,
+) -> Result<Arc<dyn BlobAnchor>, Box<dyn std::error::Error>> {
     fn require(name: &str) -> Result<String, Box<dyn std::error::Error>> {
         std::env::var(name)
             .map_err(|_| format!("{name} is required for VAULT_ANCHOR=rustfs").into())
     }
     match std::env::var("VAULT_ANCHOR").ok().as_deref() {
+        Some("presigned") => {
+            tracing::info!(%coordinator, "anchor: coordinator-issued presigned URLs (no S3 creds)");
+            Ok(Arc::new(presigned_anchor::PresignedBlobAnchor::new(
+                coordinator,
+                coord_client.clone(),
+            )))
+        }
         Some("rustfs") | Some("s3") => {
             let cfg = RustFsConfig {
                 endpoint: require("VAULT_S3_ENDPOINT")?,
@@ -209,7 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         coordinator.clone(),
         coord_client.clone(),
     ));
-    let anchor: Arc<dyn BlobAnchor> = build_anchor(&anchor_root)?;
+    let anchor: Arc<dyn BlobAnchor> = build_anchor(&anchor_root, &coordinator, &coord_client)?;
     let erasure: Arc<dyn ErasureCoder> = Arc::new(ReedSolomonCoder::new());
     let crypto: Arc<dyn Cryptographer> = Arc::new(AesGcmCryptographer::new());
     let verifier: Arc<dyn AuthVerifier> =

@@ -3,9 +3,11 @@
 //! backward compatible (new optional fields only), so an old `vault-client`
 //! keeps interoperating with a newer server.
 
+mod anchor;
 mod control;
 mod data;
 
+pub use anchor::{DeleteBlobRequest, PresignOp, PresignRequest, PresignResponse};
 pub use control::{
     CoordinatorKey, CreateNamespaceRequest, CreateNamespaceResponse, IssueCapabilityRequest,
     IssueCapabilityResponse, RegisterAppRequest, RegisterAppResponse, RepairRequest,
