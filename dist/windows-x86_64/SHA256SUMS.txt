@@ -1,0 +1,2 @@
+dd4be22cb0c3abf00c3c63a895299adc9e547dee3cc5cafff81e35a364316f6c  dist/windows-x86_64/coordinator.exe
+2dfb386000bb78fa7733332f81e7d56bb57b187a067978372ad863fe58c4f3ff  dist/windows-x86_64/node-agent.exe
