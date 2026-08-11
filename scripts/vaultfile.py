@@ -19,7 +19,8 @@ Requires:  pip install cryptography
 Usage:
   python vaultfile.py init                       # register app + namespace (writes vault.json)
   python vaultfile.py backup <path> [name]       # encrypt + upload a real file
-  python vaultfile.py list                        # list what you've stored
+  python vaultfile.py list                        # list what you've stored (local catalog)
+  python vaultfile.py names                        # names from the shared index (any client)
   python vaultfile.py restore <name> <out-path>  # download + decrypt
   python vaultfile.py delete <name>              # remove a stored file
 
@@ -75,6 +76,12 @@ def _post(url, obj):
         raise SystemExit(f"server error {e.code}: {e.read().decode()}")
 
 
+def _get(url):
+    ctx = _CTX if url.startswith("https") else None
+    with urllib.request.urlopen(urllib.request.Request(url), context=ctx) as resp:
+        return json.loads(resp.read().decode())
+
+
 def load_cfg():
     if not os.path.exists(CONFIG):
         raise SystemExit(f"no {CONFIG} - run 'python vaultfile.py init' first")
@@ -118,6 +125,40 @@ def decrypt(pw, blob, legacy_salt_hex=None):
     return AESGCM(key).decrypt(blob[:12], blob[12:], None)
 
 
+NAME_PAD = 256  # every filename encrypts to a fixed size so its length never leaks
+
+
+def pad_name(name):
+    b = name.encode()[: NAME_PAD - 2]
+    out = bytearray(NAME_PAD)
+    out[0] = (len(b) >> 8) & 255
+    out[1] = len(b) & 255
+    out[2 : 2 + len(b)] = b
+    return bytes(out)
+
+
+def unpad_name(bts):
+    n = (bts[0] << 8) | bts[1]
+    return bts[2 : 2 + n].decode()
+
+
+def enc_name(pw, name):
+    return base64.b64encode(encrypt(pw, pad_name(name))).decode()
+
+
+def dec_name(pw, b64):
+    return unpad_name(decrypt(pw, base64.b64decode(b64)))
+
+
+def publish_name(cfg, blob_id, name):
+    """Attach the encrypted filename to the manifest (the shared name index)."""
+    try:
+        _post(f"{COORD}/v1/meta/namespaces/{cfg['namespace']}/manifests/{blob_id}/name",
+              {"name_enc": enc_name(pw_of(), name)})
+    except SystemExit:
+        pass
+
+
 def token(cfg, op):
     r = _post(f"{COORD}/v1/capabilities",
               {"app_id": cfg["app_id"], "namespace": cfg["namespace"], "operation": op, "ttl_secs": 300})
@@ -152,6 +193,7 @@ def cmd_backup(path, name=None):
         "ciphertext_b64": base64.b64encode(blob).decode()})
     cfg["catalog"][name] = {"blob_id": r["blob_id"], "size": len(plaintext)}
     save_cfg(cfg)
+    publish_name(cfg, r["blob_id"], name)  # share the (encrypted) name with other clients
     print(f"backed up '{name}' ({len(plaintext)} bytes) -> {r['blob_id']}")
 
 
@@ -178,6 +220,28 @@ def cmd_restore(name, out):
     print(f"restored '{name}' -> {out} ({len(plaintext)} bytes)")
 
 
+def cmd_names():
+    """Read the shared, server-side name index — including files uploaded by
+    OTHER clients (e.g. the browser chat). Names are decrypted locally with your
+    passphrase; the coordinator only ever stored ciphertext."""
+    cfg = load_cfg()
+    ns = cfg["namespace"]
+    blobs = _get(f"{COORD}/v1/meta/namespaces/{ns}/blobs")
+    if not blobs:
+        print("(no files in this namespace)")
+        return
+    pw = pw_of()
+    for b in blobs:
+        m = _get(f"{COORD}/v1/meta/namespaces/{ns}/manifests/{b}")
+        name = "(name not published)"
+        if m and m.get("name_enc"):
+            try:
+                name = dec_name(pw, m["name_enc"])
+            except Exception:
+                name = "(cannot decrypt)"
+        print(f"  {name:<32} {m.get('ciphertext_len', 0):>10} bytes   {b}")
+
+
 def cmd_delete(name):
     cfg = load_cfg()
     entry = cfg["catalog"].pop(name, None)
@@ -200,6 +264,8 @@ def main(argv):
         cmd_backup(rest[0], rest[1] if len(rest) > 1 else None)
     elif cmd == "list":
         cmd_list()
+    elif cmd == "names":
+        cmd_names()
     elif cmd == "restore" and len(rest) == 2:
         cmd_restore(rest[0], rest[1])
     elif cmd == "delete" and rest:

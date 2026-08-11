@@ -46,6 +46,10 @@ fn router(state: AppState) -> Router {
             get(meta::get_manifest),
         )
         .route(
+            "/v1/meta/namespaces/:ns/manifests/:blob/name",
+            post(meta::set_manifest_name),
+        )
+        .route(
             "/v1/meta/namespaces/:ns/manifests/:blob/delete",
             post(meta::delete_manifest),
         )

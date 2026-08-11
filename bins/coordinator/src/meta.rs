@@ -8,8 +8,9 @@ use crate::http::{err, ApiError};
 use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::Json;
+use serde::Deserialize;
 use vault_domain::{AppContract, BlobId, Manifest, Namespace, NamespaceId};
-use vault_ports::NamespaceUsage;
+use vault_ports::{NamespaceUsage, PortError};
 
 pub async fn list_namespaces(
     State(st): State<AppState>,
@@ -86,6 +87,31 @@ pub async fn list_blobs(
         .await
         .map_err(err)?;
     Ok(Json(blobs))
+}
+
+#[derive(Deserialize)]
+pub struct SetNameRequest {
+    /// base64 of a `VMB1` envelope encrypting the length-padded filename.
+    pub name_enc: String,
+}
+
+/// Attach the client-encrypted filename to a manifest (the shared name index).
+/// The coordinator stores it verbatim — it is ciphertext, so names stay
+/// zero-knowledge while becoming visible to any client holding the vault key.
+pub async fn set_manifest_name(
+    State(st): State<AppState>,
+    Path((ns, blob)): Path<(String, String)>,
+    Json(req): Json<SetNameRequest>,
+) -> Result<(), ApiError> {
+    let (ns, blob) = (NamespaceId::new(ns), BlobId::new(blob));
+    let mut manifest = st
+        .metadata
+        .get_manifest(&ns, &blob)
+        .await
+        .map_err(err)?
+        .ok_or_else(|| err(PortError::NotFound))?;
+    manifest.name_enc = Some(req.name_enc);
+    st.metadata.put_manifest(&manifest).await.map_err(err)
 }
 
 pub async fn delete_manifest(

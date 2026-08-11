@@ -232,6 +232,27 @@ the chat UI restores byte-identical under `vaultfile.py`, and vice versa.
 (`vaultfile.py` still restores older scrypt-format backups via a legacy
 fallback.)
 
+### Shared filename index (names cross devices, still zero-knowledge)
+
+The coordinator stores only opaque `blob-…` ids, so a file backed up on one
+device would otherwise show as an id on another. VaultMesh carries an
+**encrypted** filename with each blob so real names travel between clients
+without the server ever learning them:
+
+- On upload, the client encrypts the filename with the vault key into the same
+  `VMB1` envelope and publishes it: `POST /v1/meta/namespaces/:ns/manifests/:blob/name`.
+  It lands in the manifest's `name_enc` field — ciphertext only.
+- Any client holding the vault key decrypts `name_enc` for display. The chat UI
+  shows real names; `vaultfile.py names` lists them from the shared index —
+  including files uploaded by a different client.
+- **Name-length padding:** every filename is padded to a fixed 256-byte block
+  before encryption, so the stored ciphertext is a constant size and never leaks
+  the name's length.
+
+Verified cross-client: a name published by `vaultfile.py` renders in the browser
+and vice versa, while the coordinator holds only `VMB1` ciphertext (no plaintext
+filename in any manifest).
+
 ## Self-hosting on your own machine (public IP + router, no cloud)
 
 You do **not** need a cloud host or a "public HTTPS" certificate. VaultMesh's own

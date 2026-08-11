@@ -226,6 +226,19 @@ async function decryptBytes(pass,f){
 const b64enc=u8=>{let s='';const CH=0x8000;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);};
 const b64dec=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
 
+/* Length-padded filename: every name → a fixed 256-byte plaintext (2-byte length
+   prefix + UTF-8, zero-padded), so the encrypted name's size never leaks the
+   real name length. Encrypted with the same VMB1 envelope + vault key. */
+const NAME_PAD=256;
+function padName(name){const b=new TextEncoder().encode(name).slice(0,NAME_PAD-2);
+  const o=new Uint8Array(NAME_PAD);o[0]=(b.length>>8)&255;o[1]=b.length&255;o.set(b,2);return o;}
+function unpadName(bytes){const n=((bytes[0]<<8)|bytes[1]);return new TextDecoder().decode(bytes.slice(2,2+n));}
+async function encName(pass,name){return b64enc(await encryptBytes(pass,padName(name)));}
+async function decName(pass,b64){return unpadName(await decryptBytes(pass,b64dec(b64)));}
+async function publishName(ns,blob,name){const k=keyOf(ns);if(!k)return;
+  try{await api(CO+'/v1/meta/namespaces/'+ns+'/manifests/'+blob+'/name',
+    {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name_enc:await encName(k,name)})});}catch(e){}}
+
 const keyOf=ns=>sessionStorage.getItem('vm.key.'+ns);
 function ensureKey(ns){let k=keyOf(ns);if(k)return k;
   k=prompt('This vault is end-to-end encrypted.\nEnter its encryption key for "'+(chats[ns]?.label||short(ns))+'":');
@@ -284,7 +297,9 @@ async function openChat(ns){
   let files=[];
   if(LIVE){
     for(const b of c.blobs){let m={};try{m=await api(CO+'/v1/meta/namespaces/'+ns+'/manifests/'+b);}catch(e){}
-      files.push({blob:b,name:(fileNames[ns]&&fileNames[ns][b]&&fileNames[ns][b].name)||b,
+      let nm=(fileNames[ns]&&fileNames[ns][b]&&fileNames[ns][b].name);
+      if(!nm&&m&&m.name_enc){const k=keyOf(ns);if(k){try{nm=await decName(k,m.name_enc);}catch(e){}}}
+      files.push({blob:b,name:nm||b,
         size:m?m.ciphertext_len:0,shards:(m&&m.shards)?m.shards.length:'–',ts:m?m.created_at:0});}
   } else { files=c.files||[]; }
   files.sort((a,b)=>(a.ts||0)-(b.ts||0));c.files=files;renderMessages(ns,files);
@@ -333,6 +348,7 @@ $('#sendBtn').onclick=async()=>{
     const r=await api(nodeUrl()+'/v1/backups',{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({namespace:ns,token,ciphertext_b64:b64enc(frame)})});
     fileNames[ns]=fileNames[ns]||{};fileNames[ns][r.blob_id]={name:file.name};saveFiles();
+    publishName(ns,r.blob_id,file.name);   // share the (encrypted) name with other clients
     el.querySelector('.shardtag').textContent='stored';
     el.querySelector('.tick').className='tick';el.querySelector('.tick').textContent='✓✓';
     STAGED=null;$('#stage').textContent='Attach a file to back it up…';

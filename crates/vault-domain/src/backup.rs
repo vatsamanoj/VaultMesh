@@ -48,6 +48,12 @@ pub struct Manifest {
     /// Total ciphertext length before sharding.
     pub ciphertext_len: u64,
     pub created_at: Timestamp,
+    /// Client-encrypted, length-padded filename (base64 of a `VMB1` envelope).
+    /// The coordinator only ever sees ciphertext, so names stay zero-knowledge;
+    /// any client with the vault key can decrypt it for display. `None` for
+    /// blobs uploaded without a published name (older or headless writers).
+    #[serde(default)]
+    pub name_enc: Option<String>,
 }
 
 impl Manifest {
@@ -66,6 +72,7 @@ impl Manifest {
             shards,
             ciphertext_len,
             created_at,
+            name_enc: None,
         }
     }
 
