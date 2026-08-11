@@ -13,7 +13,15 @@
 #>
 $ErrorActionPreference = "Stop"
 
-$root      = Split-Path $PSScriptRoot -Parent
+# Locate the repo root (the dir containing Cargo.toml) by walking up from the
+# script's location, so this works whether the script sits in scripts/ or the
+# repo root, and regardless of the current working directory.
+$root = $PSScriptRoot
+while ($root -and -not (Test-Path (Join-Path $root "Cargo.toml"))) {
+    $root = Split-Path $root -Parent
+}
+if (-not $root) { throw "could not locate repo root (Cargo.toml) from $PSScriptRoot" }
+
 $coordPort = 8787
 $aHttp     = 8790; $aQuic = 8791
 $bHttp     = 8792; $bQuic = 8893
@@ -92,7 +100,7 @@ try {
     & cargo run -q -p vault-client --example roundtrip
 
     Write-Host ""
-    Write-Host "(demo complete — services stopped on exit)"
+    Write-Host "(demo complete - services stopped on exit)"
 }
 finally {
     foreach ($p in $procs) {
