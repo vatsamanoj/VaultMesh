@@ -254,6 +254,118 @@ Their app (`vaultfile.py`) then talks to `127.0.0.1:8790` and backs up files —
 encrypted on their machine, sharded, and pushed to your anchor through
 coordinator-issued presigned URLs. You host the bytes; you never see plaintext.
 
+## Self-sovereign overlay with Nebula (zero third-party dependency)
+
+The port-forward setup above exposes the coordinator (`:8787`) and anchor
+(`:9000`) to the raw internet. A stronger, fully self-hosted alternative is to
+put every machine on a private overlay with [Nebula](https://github.com/slackhq/nebula)
+(MIT-licensed). Nebula depends on **no** external service — you run your own CA
+and your own *lighthouse* (discovery + NAT hole-punch helper), so nothing
+phones home. It mirrors VaultMesh's own model: your CA, your rendezvous, Noise +
+AES-256-GCM on the wire. Your public-IP machine is the lighthouse; the coordinator
+and anchor bind the **overlay** address and become unreachable from the public
+internet. The only inbound you forward is **one UDP port (4242)** for the lighthouse.
+
+```
+  YOUR MACHINE (public IP)                       REMOTE USER
+ ┌───────────────────────────────┐             ┌──────────────────────────┐
+ │ nebula lighthouse  UDP :4242  ◀┼──hole-punch─┼▶ nebula host             │
+ │ overlay 192.168.100.1          │             │  overlay 192.168.100.5   │
+ │ coordinator  :8787  ◀──mTLS────┼─────────────┼─ node-agent              │
+ │ RustFS anchor :9000 ◀presigned─┼─────────────┼─ VAULT_ANCHOR=presigned  │
+ └───────────────────────────────┘             └──────────────────────────┘
+   forward ONLY UDP 4242; 8787 + 9000 bind the overlay — no public exposure.
+```
+
+### 1. Create your Nebula CA (once, on any trusted box)
+
+```sh
+nebula-cert ca -name "VaultMesh Overlay CA"
+# → ca.crt (distribute) + ca.key (keep offline/secret)
+```
+
+### 2. Sign a cert per machine
+
+```sh
+# the lighthouse (your public-IP machine) — overlay IP .1
+nebula-cert sign -name "lighthouse" -ip "192.168.100.1/24"
+# each remote user — a unique overlay IP
+nebula-cert sign -name "user-alice" -ip "192.168.100.5/24" -groups "users"
+```
+
+Each user gets three files: `ca.crt`, their `host.crt`, their `host.key`.
+
+### 3. Lighthouse config (your machine) — `config.yml`
+
+```yaml
+pki:
+  ca: /etc/nebula/ca.crt
+  cert: /etc/nebula/lighthouse.crt
+  key: /etc/nebula/lighthouse.key
+static_host_map: {}
+lighthouse:
+  am_lighthouse: true
+listen:
+  host: 0.0.0.0
+  port: 4242
+firewall:
+  inbound:
+    - { port: any, proto: any, group: any }   # tighten in production
+  outbound:
+    - { port: any, proto: any, host: any }
+```
+
+Forward **UDP 4242** on your router to this machine, then `nebula -config config.yml`.
+
+### 4. Remote host config — `config.yml`
+
+```yaml
+pki:
+  ca: ca.crt
+  cert: user-alice.crt
+  key: user-alice.key
+static_host_map:
+  "192.168.100.1": ["YOUR_PUBLIC_IP_OR_DDNS:4242"]   # where the lighthouse lives
+lighthouse:
+  am_lighthouse: false
+  hosts: ["192.168.100.1"]
+firewall:
+  inbound:  [{ port: any, proto: any, group: any }]
+  outbound: [{ port: any, proto: any, host: any }]
+```
+
+Run `nebula -config config.yml`; the host joins the overlay and can reach
+`192.168.100.1`.
+
+### 5. Bind VaultMesh to the overlay
+
+On your machine, bind the coordinator and point the anchor endpoint at the
+**overlay** address (so presigned URLs resolve on the overlay, never publicly):
+
+```sh
+VAULT_COORDINATOR_ADDR=192.168.100.1:8787 \
+VAULT_TLS_MODE=mtls VAULT_TLS_SANS=192.168.100.1,localhost \
+VAULT_S3_ENDPOINT=http://192.168.100.1:9000 \
+VAULT_S3_BUCKET=vaultmesh VAULT_S3_ACCESS_KEY=... VAULT_S3_SECRET_KEY=... \
+  coordinator
+```
+
+The remote node-agent then targets the overlay coordinator:
+
+```sh
+VAULT_COORDINATOR_URL=https://192.168.100.1:8787 \
+VAULT_CA_CERT=ca-root.pem \
+VAULT_CLIENT_CERT=client.pem VAULT_CLIENT_KEY=client.key \
+VAULT_ANCHOR=presigned \
+  node-agent
+```
+
+You now have three self-owned layers with no third party anywhere: Nebula
+(Noise, your Nebula CA) → VaultMesh mTLS (your rcgen CA) → client-side
+AES-256-GCM. Trade-off: every user installs the Nebula client and holds a
+Nebula host cert **in addition to** the VaultMesh client cert — trivial for your
+own fleet, heavier onboarding for arbitrary public customers.
+
 ## Remaining hardening (this reference build)
 
 - The `x-vault-fingerprint` header stands in for a real TLS JA3/JA4 fingerprint.
