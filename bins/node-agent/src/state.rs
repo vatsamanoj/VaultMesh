@@ -4,10 +4,11 @@
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use vault_app::{DeleteBackup, GetBackup, ListBackups, PruneVersions, PutBackup, RepairShards};
-use vault_ports::BlobAnchor;
+use vault_ports::{BlobAnchor, Clock};
 
-/// Live status of the background repair sweep, surfaced to the console so an
-/// operator can see auto-repair working over time.
+/// Live status of the repair subsystem, surfaced to the console so an operator
+/// can see auto-repair working over time — both the scheduled background sweep
+/// and reactive heals triggered by reads of degraded blobs.
 #[derive(Clone, Default, Serialize)]
 pub struct SweepStatus {
     pub enabled: bool,
@@ -18,7 +19,14 @@ pub struct SweepStatus {
     pub last_checked: u64,
     pub last_repaired: u64,
     pub last_unrepairable: u64,
+    /// Grand total of shards healed, by the sweep and by reactive reads.
     pub total_repaired: u64,
+    /// Blobs healed reactively (a read found them degraded and triggered a heal).
+    pub reactive_heals: u64,
+    /// Shards healed reactively (subset of `total_repaired`).
+    pub reactive_repaired: u64,
+    /// Epoch millis of the last reactive heal (`0` = never yet).
+    pub last_reactive_ms: u64,
 }
 
 /// Shared handle updated by the sweep loop and read by the status endpoint.
@@ -35,6 +43,8 @@ pub struct AppState {
     pub prune: Arc<PruneVersions>,
     /// Local anchor, used to store/serve shards for peers (P2 mesh).
     pub anchor: Arc<dyn BlobAnchor>,
-    /// Background repair-sweep status (for the console indicator).
+    /// Repair status (sweep + reactive heals), for the console indicator.
     pub sweep: SweepHandle,
+    /// Wall clock, used to timestamp reactive heals.
+    pub clock: Arc<dyn Clock>,
 }

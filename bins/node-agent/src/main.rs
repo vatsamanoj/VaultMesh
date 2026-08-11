@@ -337,6 +337,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )),
         anchor: anchor.clone(),
         sweep: sweep.clone(),
+        clock: clock.clone(),
     };
 
     // Optional background repair sweep (VAULT_REPAIR_SECS > 0 enables it).

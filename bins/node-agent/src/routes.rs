@@ -113,13 +113,17 @@ pub async fn get_backup(
     if outcome.shards_missing > 0 {
         let repair = st.repair.clone();
         let sweep = st.sweep.clone();
+        let clock = st.clock.clone();
         let namespace = req.namespace.clone();
         let blob_id = req.blob_id.clone();
         tokio::spawn(async move {
             if let Ok(report) = repair.execute(&namespace, &blob_id).await {
                 if report.repaired > 0 {
                     if let Ok(mut s) = sweep.lock() {
+                        s.reactive_heals += 1;
+                        s.reactive_repaired += report.repaired as u64;
                         s.total_repaired += report.repaired as u64;
+                        s.last_reactive_ms = clock.now().as_millis();
                     }
                 }
             }

@@ -491,9 +491,18 @@ async function pollSweep(){
   const el=$('#sweepbar');
   try{
     const s=await api(nodeUrl()+'/v1/maintenance/status');
-    if(!s.enabled){el.innerHTML='<span class="dot off"></span>Auto-repair off';return;}
+    // Reactive repair heals a blob the moment a read finds it degraded — it runs
+    // whether or not the scheduled sweep is enabled, so it gets its own segment.
+    const reactive=s.reactive_repaired>0
+      ? ` · ⚡ <b>${s.reactive_repaired}</b> healed on read${s.last_reactive_ms?(' '+ago(s.last_reactive_ms)):''}`
+      : '';
+    if(!s.enabled){
+      el.innerHTML=`<span class="dot ${s.reactive_repaired>0?'on':'off'}"></span>`
+        +(s.reactive_repaired>0?`Repair-on-read active${reactive}`:'Auto-repair off · repair-on-read armed');
+      return;
+    }
     const when=s.last_run_ms?('swept '+ago(s.last_run_ms)):'first sweep pending';
-    el.innerHTML=`<span class="dot on"></span>Auto-repair · every ${s.interval_secs}s · ${when} · <b>${s.total_repaired}</b> shard(s) healed`;
+    el.innerHTML=`<span class="dot on"></span>Auto-repair · every ${s.interval_secs}s · ${when} · <b>${s.total_repaired}</b> shard(s) healed${reactive}`;
   }catch(e){el.innerHTML='<span class="dot off"></span>node-agent offline';}
 }
 pollSweep(); setInterval(pollSweep, 4000);
