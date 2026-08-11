@@ -9,7 +9,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use vault_app::{UsageReport, UsageStatement};
-use vault_ports::{CertAuthority, NameResolver};
+use vault_ports::{CertAuthority, IntrusionRecord, IntrusionSink, NameResolver, ThreatResponder};
 use vault_proto::PROTOCOL_VERSION;
 
 #[derive(Serialize)]
@@ -24,6 +24,59 @@ pub async fn intrusions(State(st): State<AppState>) -> Json<IntrusionView> {
         entries: st.intrusions.entries(),
         chain_valid: st.intrusions.verify(),
         blocked: st.responder.blocked(),
+    })
+}
+
+#[derive(Deserialize, Default)]
+pub struct SimulateRequest {
+    #[serde(default)]
+    pub fingerprint: Option<String>,
+    #[serde(default)]
+    pub strikes: Option<u32>,
+}
+
+#[derive(Serialize)]
+pub struct SimulateResponse {
+    pub fingerprint: String,
+    pub strikes: u32,
+    pub blocked: bool,
+    pub decisions: Vec<String>,
+}
+
+/// Drill/demo: replay N unauthorized-request "strikes" from one fingerprint
+/// through the real responder + ledger, so an operator can watch the perimeter
+/// escalate (tarpit → block) without a live attacker. Entries are marked
+/// `simulated` in the ledger so the audit trail stays honest.
+pub async fn perimeter_simulate(
+    State(st): State<AppState>,
+    Json(req): Json<SimulateRequest>,
+) -> Json<SimulateResponse> {
+    let fp = req
+        .fingerprint
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| st.ids.new_id("sim-attacker"));
+    let n = req.strikes.unwrap_or(3).clamp(1, 20);
+    let now = st.clock.now().as_millis();
+    let mut decisions = Vec::with_capacity(n as usize);
+    for _ in 0..n {
+        let decision = st.responder.assess(&fp, "authorization_violation");
+        let _ = st
+            .intrusions
+            .record(IntrusionRecord {
+                source_ip: fp.clone(),
+                ja3: Some(fp.clone()),
+                attack_class: "authorization_violation".into(),
+                rejection_reason: format!("simulated attack; decision={decision:?}"),
+                at_millis: now,
+            })
+            .await;
+        decisions.push(format!("{decision:?}"));
+    }
+    Json(SimulateResponse {
+        blocked: st.responder.is_blocked(&fp),
+        fingerprint: fp,
+        strikes: n,
+        decisions,
     })
 }
 

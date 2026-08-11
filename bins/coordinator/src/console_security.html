@@ -27,6 +27,10 @@
   .pill.ok b{color:var(--ok)} .pill.bad b{color:var(--bad)}
   a.back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 11px}
   a.back:hover{color:var(--ink);background:var(--chip)}
+  .btn{font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:8px;border:0;background:var(--brand);color:#fff;cursor:pointer}
+  .btn:disabled{opacity:.55;cursor:progress}
+  .cardhead{display:flex;align-items:center;gap:12px;justify-content:space-between}
+  .simnote{font-size:12px;color:var(--muted)}
   main{max-width:1040px;margin:0 auto;padding:22px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
   .card h2{margin:0 0 3px;font-size:15px}
@@ -59,9 +63,13 @@
 </header>
 <main>
   <div class="card">
-    <h2>Blocklist</h2>
+    <div class="cardhead">
+      <h2>Blocklist</h2>
+      <button class="btn" id="simBtn" title="Replay 3 unauthorized strikes from a fresh fingerprint">⚔ Simulate attack</button>
+    </div>
     <p class="sub">Fingerprints (JA3/JA4 stand-in) auto-blocked after repeated auth/authz violations. Blocked callers are dropped at the earliest layer — before any app logic.</p>
     <div class="blocklist" id="blocklist"><span class="empty">none blocked</span></div>
+    <div class="simnote" id="simnote"></div>
   </div>
   <div class="card">
     <h2>Intrusion ledger <span style="font-weight:400;color:var(--muted)">— tamper-evident hash chain</span></h2>
@@ -102,6 +110,17 @@ async function tick(){
     }
   }catch(e){/* keep last view */}
 }
+$('#simBtn').onclick=async()=>{
+  const btn=$('#simBtn');btn.disabled=true;
+  try{
+    const r=await fetch('/v1/admin/perimeter/simulate',{method:'POST',
+      headers:{'content-type':'application/json'},body:JSON.stringify({strikes:3})}).then(r=>r.json());
+    $('#simnote').textContent=`Simulated ${r.strikes} strikes from ${r.fingerprint} → ${r.decisions.join(' → ')}`
+      +(r.blocked?' → now BLOCKED':'');
+    await tick();
+  }catch(e){$('#simnote').textContent='simulate failed: '+e.message;}
+  finally{btn.disabled=false;}
+};
 tick(); setInterval(tick, 2000);
 </script>
 </body>

@@ -57,6 +57,10 @@ fn router(state: AppState) -> Router {
         // admin / forensics plane
         .route("/v1/admin/status", get(admin::status))
         .route("/v1/admin/intrusions", get(admin::intrusions))
+        .route(
+            "/v1/admin/perimeter/simulate",
+            post(admin::perimeter_simulate),
+        )
         .route("/v1/usage/:app", get(admin::usage))
         // coordinator-issued anchor access (presigned URLs)
         .route("/v1/anchor/presign", post(presign::presign))
